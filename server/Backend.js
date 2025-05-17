@@ -114,7 +114,7 @@
       pendingBookings.splice(bookingIndex, 1);
       writeToJSON(bookingBuffer, pendingBookings);
       // Return success and removed booking
-      console.loog(`Booking ${bookingReference} removed from buffer`)
+      console.log(`Booking ${bookingReference} removed from buffer`)
       return {
         success: true,
         message: `Booking ${bookingReference} removed from buffer`,
@@ -303,7 +303,7 @@ function addBookingToBuffer(booking) {
   return KROO_BOOKING_APP.addBookingToBuffer(booking)
 }
 
-function addBookingToDB(booking) {
+function addBookingToDatabase(booking) {
   booking = booking || testBookingD
   return KROO_BOOKING_APP.addBookingToDB(booking)
 }

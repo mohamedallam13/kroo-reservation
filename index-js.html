@@ -1,0 +1,4147 @@
+<script>
+  /**
+ * KROO Reservations App - Optimized JavaScript
+ * 
+ * This file contains all the JavaScript functionality for the KROO Reservations application,
+ * organized in a more modular and maintainable way.
+ */
+
+// ===== APP CONFIGURATION =====
+const CONFIG = {
+  businessHours: {
+    start: 9, // 9:00 AM
+    end: 23   // 11:00 PM
+  }
+};
+
+// ===== MOCK DATA =====
+// These would be replaced with API calls in a production environment
+let resources = [
+  {
+    id: 1,
+    name: "Overlook Conference Room",
+    image: "/api/placeholder/400/260",
+    capacity: 8,
+    status: "available",
+    location: "3rd Floor, East Wing",
+    pricePerHour: 100 // EGP per hour
+  },
+  {
+    id: 2,
+    name: "Focus Pod A",
+    image: "/api/placeholder/400/260",
+    capacity: 2,
+    status: "available",
+    location: "2nd Floor, North Wing",
+    pricePerHour: 75 // EGP per hour
+  },
+  {
+    id: 3,
+    name: "Executive Meeting Room",
+    image: "/api/placeholder/400/260",
+    capacity: 12,
+    status: "available",
+    location: "5th Floor, West Wing",
+    pricePerHour: 150 // EGP per hour
+  },
+  {
+    id: 4,
+    name: "Creative Studio",
+    image: "/api/placeholder/400/260",
+    capacity: 6,
+    status: "maintenance",
+    location: "1st Floor, South Wing",
+    pricePerHour: 120 // EGP per hour
+  },
+  {
+    id: 5,
+    name: "Corner Office",
+    image: "/api/placeholder/400/260",
+    capacity: 4,
+    status: "available",
+    location: "4th Floor, East Wing",
+    pricePerHour: 90 // EGP per hour
+  },
+  {
+    id: 6,
+    name: "Garden Lounge",
+    image: "/api/placeholder/400/260",
+    capacity: 10,
+    status: "available",
+    location: "Ground Floor, Central",
+    pricePerHour: 110 // EGP per hour
+  }
+];
+
+// Updated bookings array with user information
+// Add this to your existing code where the bookings array is defined
+
+const bookings = [
+  {
+    id: 101,
+    resourceId: 1,
+    resourceName: "Overlook Conference Room",
+    date: getDateString(0), // Today
+    startTime: "09:00",
+    endTime: "11:00",
+    status: "CONFIRMED",
+    price: 200, // EGP
+    paymentMethod: "credit-card",
+    paymentStatus: "completed",
+    // Added user information
+    userDetails: {
+      email: "john.doe@example.com",
+      name: "John Doe",
+      phone: "+20 123 456 7890"
+    },
+    // Metadata about who created the booking
+    createdBy: {
+      email: "john.doe@example.com",
+      isAdmin: false
+    }
+  },
+  {
+    id: 102,
+    resourceId: 3,
+    resourceName: "Executive Meeting Room",
+    date: getDateString(-3), // 3 days ago
+    startTime: "14:00",
+    endTime: "16:00",
+    status: "EXPIRED",
+    price: 300, // EGP
+    paymentMethod: "instapay",
+    paymentStatus: "completed",
+    // Added user information
+    userDetails: {
+      email: "sarah.smith@example.com",
+      name: "Sarah Smith",
+      phone: "+20 123 456 7891"
+    },
+    // Booking created by admin
+    createdBy: {
+      email: "admin@example.com",
+      isAdmin: true
+    }
+  },
+  {
+    id: 103,
+    resourceId: 2,
+    resourceName: "Focus Pod A",
+    date: getDateString(5), // 5 days from now
+    startTime: "10:00",
+    endTime: "12:00",
+    status: "CONFIRMED",
+    price: 150, // EGP
+    paymentMethod: "cash",
+    paymentStatus: "pending",
+    // Added user information
+    userDetails: {
+      email: "ahmed.ibrahim@example.com",
+      name: "Ahmed Ibrahim",
+      phone: "+20 111 222 3333"
+    },
+    // Self-booking
+    createdBy: {
+      email: "ahmed.ibrahim@example.com",
+      isAdmin: false
+    }
+  }
+];
+
+const bookedSlots = [
+  { resourceId: 1, date: getDateString(0), startTime: "09:00", endTime: "11:00" }, // Today
+  { resourceId: 1, date: getDateString(0), startTime: "14:00", endTime: "15:00" }, // Today
+  { resourceId: 1, date: getDateString(1), startTime: "11:00", endTime: "13:00" }, // Tomorrow 
+  { resourceId: 2, date: getDateString(0), startTime: "13:00", endTime: "17:00" }, // Today
+  { resourceId: 3, date: getDateString(0), startTime: "09:00", endTime: "12:00" }, // Today
+  { resourceId: 3, date: getDateString(2), startTime: "15:00", endTime: "17:00" }  // Day after tomorrow
+];
+
+
+// Updated payment methods array with logo images
+const paymentMethods = [
+  {
+    id: "credit-card",
+    name: "Credit Card",
+    description: "Pay securely with Visa, Mastercard, or Amex",
+    icon: "https://cdn-icons-png.flaticon.com/512/179/179457.png",
+    requiresVerification: false,
+    type: "online"
+  },
+  {
+    id: "instapay",
+    name: "Instapay",
+    description: "Transfer via bank Instapay system",
+    icon: "https://lh3.googleusercontent.com/d/1DPVAkeLCYYdRrIbd3JK1WDAw874sheWS",
+    requiresVerification: true,
+    type: "transfer"
+  },
+  {
+    id: "cash",
+    name: "Cash",
+    description: "Pay in cash when you arrive",
+    icon: "https://cdn-icons-png.flaticon.com/512/2489/2489756.png",
+    requiresVerification: false,
+    type: "in-person"
+  }
+];
+
+// Global users data for admin dropdown
+window.appUsers = [
+  {
+    email: "john.doe@example.com",
+    name: "John Doe",
+    phone: "+20 123 456 7890",
+    discount: 5
+  },
+  {
+    email: "sarah.smith@example.com",
+    name: "Sarah Smith",
+    phone: "+20 123 456 7891",
+    discount: 10
+  },
+  {
+    email: "ahmed.ibrahim@example.com",
+    name: "Ahmed Ibrahim",
+    phone: "+20 111 222 3333",
+    discount: 0
+  },
+  {
+    email: "nora.hassan@example.com",
+    name: "Nora Hassan",
+    phone: "+20 222 333 4444",
+    discount: 15
+  },
+  {
+    email: "michael.chen@example.com",
+    name: "Michael Chen",
+    phone: "+20 555 666 7777",
+    discount: 5
+  },
+  {
+    email: "fatima.ali@example.com",
+    name: "Fatima Ali",
+    phone: "+20 777 888 9999",
+    discount: 20
+  },
+  {
+    email: "omar.mahmoud@example.com",
+    name: "Omar Mahmoud",
+    phone: "+20 444 555 6666",
+    discount: 0
+  },
+  {
+    email: "leila.karim@example.com",
+    name: "Leila Karim",
+    phone: "+20 888 999 0000",
+    discount: 5
+  },
+  {
+    email: "david.wang@example.com",
+    name: "David Wang",
+    phone: "+20 333 222 1111",
+    discount: 10
+  },
+  {
+    email: "amina.nasser@example.com",
+    name: "Amina Nasser",
+    phone: "+20 999 888 7777",
+    discount: 0
+  }
+];
+
+// Helper function to get date string for today +/- days
+function getDateString(dayOffset = 0) {
+  const date = new Date();
+  date.setDate(date.getDate() + dayOffset);
+  return date.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+}
+
+// ===== APP STATE =====
+const AppState = {
+  // Booking properties
+  currentResourceId: null,
+  selectedDateValue: null,
+  selectedTimeSlot: null,
+  selectedPaymentMethod: null,
+  uploadedFile: null,
+  verifiedPayments: [],
+  currentBookingFilter: 'upcoming',
+  
+  // User properties
+  userEmail: '',
+  userName: '',
+  userPhone: '',
+  userDiscount: 0,
+  isAdmin: false,
+  
+  // Initialize user from hidden inputs
+  initializeUser: function() {
+    this.userEmail = document.getElementById('user-email').value || '';
+    this.userName = document.getElementById('user-name').value || '';
+    this.userDiscount = parseFloat(document.getElementById('user-discount').value || '0');
+    this.isAdmin = document.getElementById('is-admin').value === 'true';
+    
+    console.log('User initialized:', {
+      email: this.userEmail,
+      name: this.userName,
+      discount: this.userDiscount,
+      isAdmin: this.isAdmin
+    });
+  },
+  
+  // Check if user email is provided
+  hasUserEmail: function() {
+    return this.userEmail !== '';
+  },
+  
+  // Set user details from form
+  setUserDetails: function(userData) {
+    this.userEmail = userData.email || this.userEmail;
+    this.userName = userData.name || this.userName;
+    this.userPhone = userData.phone || this.userPhone;
+    this.userDiscount = userData.discount !== undefined ? userData.discount : this.userDiscount;
+    
+    console.log('User details updated:', {
+      email: this.userEmail,
+      name: this.userName,
+      phone: this.userPhone,
+      discount: this.userDiscount
+    });
+  }
+};
+
+// ===== DOM MANIPULATION HELPERS =====
+const DOM = {
+  /**
+   * Get an element by ID
+   * @param {string} id - Element ID
+   * @returns {HTMLElement|null} The element or null if not found
+   */
+  byId: (id) => document.getElementById(id),
+  
+  /**
+   * Create an element from a template
+   * @param {string} templateId - Template ID
+   * @returns {DocumentFragment|null} The cloned template content
+   */
+  createFromTemplate: (templateId) => {
+    const template = document.getElementById(templateId);
+    return template ? template.content.cloneNode(true) : null;
+  },
+  
+  /**
+   * Show an element
+   * @param {HTMLElement} element - Element to show
+   * @param {string} [display='block'] - Display value
+   */
+  show: (element, display = 'block') => {
+    if (element) element.style.display = display;
+  },
+  
+  /**
+   * Hide an element
+   * @param {HTMLElement} element - Element to hide
+   */
+  hide: (element) => {
+    if (element) element.style.display = 'none';
+  },
+  
+  /**
+   * Add a class to an element
+   * @param {HTMLElement} element - Element to modify
+   * @param {string} className - Class to add
+   */
+  addClass: (element, className) => {
+    if (element) element.classList.add(className);
+  },
+  
+  /**
+   * Remove a class from an element
+   * @param {HTMLElement} element - Element to modify
+   * @param {string} className - Class to remove
+   */
+  removeClass: (element, className) => {
+    if (element) element.classList.remove(className);
+  },
+  
+  /**
+   * Toggle a class on an element
+   * @param {HTMLElement} element - Element to modify
+   * @param {string} className - Class to toggle
+   * @param {boolean} [force] - Force add or remove
+   */
+  toggleClass: (element, className, force) => {
+    if (element) element.classList.toggle(className, force);
+  }
+};
+
+// ===== UTILITY FUNCTIONS =====
+const Utils = {
+  /**
+   * Convert HH:MM time to minutes since midnight
+   * @param {string} timeString - Time in HH:MM format
+   * @returns {number} Minutes since midnight
+   */
+  convertTimeToMinutes: (timeString) => {
+    const [hours, minutes] = timeString.split(':').map(Number);
+    return hours * 60 + minutes;
+  },
+  
+  /**
+   * Format time from HH:MM to 12-hour format (e.g., "9 AM", "2:30 PM")
+   * @param {string} timeString - Time in HH:MM format
+   * @returns {string} Formatted time
+   */
+  formatTime: (timeString) => {
+    if (!timeString) return '';
+    
+    const [hours, minutes] = timeString.split(':').map(Number);
+    const hour = parseInt(hours);
+    
+    const suffix = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    
+    return `${displayHour}${minutes !== 0 ? ':' + minutes.toString().padStart(2, '0') : ''} ${suffix}`;
+  },
+
+  /**
+   * Format duration in hours to a readable string
+   * @param {number} hours - Duration in hours
+   * @returns {string} Formatted duration
+   */
+  formatDuration: (hours) => {
+    if (hours === 1) {
+      return "1 hour";
+    } else if (hours < 1) {
+      const minutes = Math.round(hours * 60);
+      return `${minutes} min`;
+    } else {
+      const wholeHours = Math.floor(hours);
+      const minutes = Math.round((hours - wholeHours) * 60);
+      
+      if (minutes === 0) {
+        return `${wholeHours} hour${wholeHours > 1 ? 's' : ''}`;
+      } else {
+        return `${wholeHours} hour${wholeHours > 1 ? 's' : ''} ${minutes} min`;
+      }
+    }
+  },
+  
+  /**
+   * Capitalize the first letter of a string
+   * @param {string} string - String to capitalize
+   * @returns {string} Capitalized string
+   */
+  capitalizeFirstLetter: (string) => {
+    return string.charAt(0).toUpperCase() + string.slice(1);
+  },
+  
+  /**
+   * Calculate booking price with discount
+   * @param {number} basePrice - Original price before discount
+   * @param {number} userDiscount - Discount percentage (0-100)
+   * @returns {object} Price details including original, discount amount, and final price
+   */
+  calculateBookingPrice: (basePrice, userDiscount = 0) => {
+  // Ensure discount is a valid number
+  const discount = parseFloat(userDiscount) || 0;
+  
+  // Calculate the discount amount
+  const discountAmount = (basePrice * discount) / 100;
+  
+  // Calculate final price with discount applied
+  const finalPrice = basePrice - discountAmount;
+  
+  return {
+    originalPrice: basePrice,
+    discountAmount: discountAmount,
+    finalPrice: finalPrice,
+    discountPercentage: discount
+  };
+},
+  
+  /**
+   * Generate a random reference number
+   * @returns {string} Random reference number with date prefix
+   */
+  generateReferenceNumber: () => {
+    const today = new Date();
+    const refDate = `${today.getFullYear().toString().substr(2)}${(today.getMonth() + 1).toString().padStart(2, '0')}${today.getDate().toString().padStart(2, '0')}`;
+    const refNum = Math.floor(10000 + Math.random() * 90000);
+    return refDate + refNum;
+  },
+
+  /**
+   * Generate a unique booking reference number
+   * Format: KROO-[YYYYMMDD]-[5 random digits]
+   * @returns {string} Booking reference number
+   */
+  generateBookingReference: ()=> {
+    const today = new Date();
+    const dateStr = today.getFullYear() +
+                  (today.getMonth() + 1).toString().padStart(2, '0') +
+                  today.getDate().toString().padStart(2, '0');
+    
+    // Generate 5 random digits
+    const randomPart = Math.floor(10000 + Math.random() * 90000);
+    
+    return `KROO-${dateStr}-${randomPart}`;
+  }
+};
+
+// ===== TOAST NOTIFICATIONS =====
+const Toast = {
+  /**
+   * Show a toast notification
+   * @param {string} type - Toast type ('success', 'error', 'info')
+   * @param {string} message - Toast message
+   */
+  show: (type, message) => {
+    // Check if there's an existing toast and remove it
+    const existingToast = document.querySelector('.toast.active');
+    if (existingToast) {
+      existingToast.remove();
+    }
+    
+    // Create new toast
+    const toast = document.createElement('div');
+    toast.className = `toast ${type === 'success' ? 'toast-success' : type === 'error' ? 'toast-error' : 'toast-info'}`;
+    
+    // Icon based on type
+    let iconHtml = '';
+    if (type === 'success') {
+      iconHtml = `
+        <div class="toast-icon">
+          <div class="toast-icon-success">
+            <i class="fas fa-check"></i>
+          </div>
+        </div>
+      `;
+    } else if (type === 'error') {
+      iconHtml = `
+        <div class="toast-icon">
+          <div class="toast-icon-error">
+            <i class="fas fa-times"></i>
+          </div>
+        </div>
+      `;
+    } else {
+      iconHtml = `
+        <div class="toast-icon">
+          <div style="background-color: #3B82F6; color: white; border-radius: 50%; width: 1.5rem; height: 1.5rem; display: flex; align-items: center; justify-content: center;">
+            <i class="fas fa-info"></i>
+          </div>
+        </div>
+      `;
+    }
+    
+    toast.innerHTML = `
+      ${iconHtml}
+      <div class="toast-message">${message}</div>
+    `;
+    
+    // Add to document
+    document.body.appendChild(toast);
+    
+    // Show toast
+    setTimeout(() => {
+      toast.classList.add('active');
+    }, 10);
+    
+    // Auto hide after 3 seconds
+    setTimeout(() => {
+      toast.classList.remove('active');
+      setTimeout(() => {
+        toast.remove();
+      }, 300);
+    }, 3000);
+  }
+};
+
+
+// ===== UI COMPONENTS =====
+const UI = {
+  // Navigation and views
+  showResourcesView: () => {
+    const resourcesView = DOM.byId('resources-view');
+    const bookingsView = DOM.byId('bookings-view');
+    const tabResources = DOM.byId('tab-resources');
+    const tabBookings = DOM.byId('tab-bookings');
+    
+    if (resourcesView && bookingsView && tabResources && tabBookings) {
+      DOM.show(resourcesView, 'grid');
+      DOM.hide(bookingsView);
+      
+      DOM.addClass(tabResources, 'active');
+      DOM.removeClass(tabBookings, 'active');
+    }
+  },
+  
+  showBookingsView: () => {
+    const resourcesView = DOM.byId('resources-view');
+    const bookingsView = DOM.byId('bookings-view');
+    const tabResources = DOM.byId('tab-resources');
+    const tabBookings = DOM.byId('tab-bookings');
+    
+    if (resourcesView && bookingsView && tabResources && tabBookings) {
+      DOM.hide(resourcesView);
+      DOM.show(bookingsView);
+      
+      DOM.removeClass(tabResources, 'active');
+      DOM.addClass(tabBookings, 'active');
+      
+      UI.renderBookings();
+    }
+  },
+  
+  setBookingFilter: (filter) => {
+    AppState.currentBookingFilter = filter;
+    
+    const filterUpcoming = DOM.byId('filter-upcoming');
+    const filterPast = DOM.byId('filter-past');
+    
+    if (filterUpcoming && filterPast) {
+      if (filter === 'upcoming') {
+        DOM.addClass(filterUpcoming, 'active');
+        DOM.removeClass(filterPast, 'active');
+      } else {
+        DOM.removeClass(filterUpcoming, 'active');
+        DOM.addClass(filterPast, 'active');
+      }
+      
+      UI.renderBookings();
+    }
+  },
+  
+  // Resource rendering
+  renderResources: () => {
+    const resourcesContainer = DOM.byId('resources-view');
+  if (!resourcesContainer) return;
+  
+  // Show skeleton loaders while resources are loading
+  LoadingManager.showSkeletonLoader(resourcesContainer, 'rect', 3);
+  
+  // Use the API module to fetch resources
+  API.fetchResources()
+    .then(fetchedResources => {
+      // Hide skeleton loaders
+      LoadingManager.hideSkeletonLoader(resourcesContainer);
+      
+      // Clear container
+      resourcesContainer.innerHTML = '';
+      
+      // Render each resource
+      fetchedResources.forEach(resource => {
+        const card = document.createElement('div');
+        card.className = 'resource-card';
+        
+        const statusBadgeClass = resource.status === 'available' 
+          ? 'status-badge available' 
+          : 'status-badge maintenance';
+        
+        card.innerHTML = `
+          <div class="card-image">
+            <img src="${resource.image}" alt="${resource.name}" loading="lazy">
+            <div class="${statusBadgeClass}">
+              ${Utils.capitalizeFirstLetter(resource.status)}
+            </div>
+          </div>
+          <div class="card-content">
+            <h3 class="card-title">${resource.name}</h3>
+            <div class="card-details">
+              <div class="detail-item">
+                <i class="fas fa-map-marker-alt"></i>
+                <span>${resource.location}</span>
+              </div>
+              <div class="detail-item">
+                <i class="fas fa-users"></i>
+                <span>Capacity: ${resource.capacity} people</span>
+              </div>
+              <div class="detail-item">
+                <i class="fas fa-money-bill-wave"></i>
+                <span>EGP ${resource.pricePerHour}/hour</span>
+              </div>
+            </div>
+            <div class="card-actions">
+              <button 
+                class="btn ${resource.status === 'available' ? 'btn-primary' : 'btn-disabled'}"
+                ${resource.status !== 'available' ? 'disabled' : ''}
+                data-resource-id="${resource.id}"
+              >
+                Book Now
+              </button>
+            </div>
+          </div>
+        `;
+        
+        resourcesContainer.appendChild(card);
+        
+        // Add event listener to the Book Now button
+        const bookButton = card.querySelector('button[data-resource-id]');
+        if (resource.status === 'available' && bookButton) {
+          bookButton.addEventListener('click', () => {
+            BookingModal.open(resource.id);
+          });
+        }
+      });
+    })
+    .catch(error => {
+      // Hide skeleton loaders
+      LoadingManager.hideSkeletonLoader(resourcesContainer);
+      
+      // Show error message in container
+      resourcesContainer.innerHTML = `
+        <div class="error-container">
+          <i class="fas fa-exclamation-circle error-icon"></i>
+          <h3>Could not load resources</h3>
+          <p>${error.message || 'Please try again later.'}</p>
+          <button class="btn btn-primary retry-button">
+            <i class="fas fa-sync"></i> Retry
+          </button>
+        </div>
+      `;
+      
+      // Add event listener to retry button
+      const retryButton = resourcesContainer.querySelector('.retry-button');
+      if (retryButton) {
+        retryButton.addEventListener('click', UI.renderResources);
+      }
+      
+      // Show error toast
+      Toast.show('error', 'Could not load resources. Please try again later.');
+      console.error('Error loading resources:', error);
+    });
+},
+  
+  // Bookings rendering
+  renderBookings: () => {
+  const bookingsList = DOM.byId('bookings-list');
+  if (!bookingsList) return;
+  
+  // Show section loader
+  LoadingManager.showSectionLoader('#bookings-view');
+  
+  // Simulate API call to get bookings
+  setTimeout(() => {
+    // Hide section loader
+    LoadingManager.hideSectionLoader('#bookings-view');
+    
+    // Clear bookings list
+    bookingsList.innerHTML = '';
+    
+    // Filter bookings based on current filter
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    let filteredBookings = bookings.filter(booking => {
+      const bookingDate = new Date(booking.date);
+      bookingDate.setHours(0, 0, 0, 0);
+      
+      if (AppState.currentBookingFilter === 'upcoming') {
+        return bookingDate >= today && booking.status !== 'CANCELED';
+      } else {
+        return bookingDate < today || booking.status === 'CANCELED' || booking.status === 'EXPIRED';
+      }
+    });
+    
+    // Additional filtering based on user role
+    if (!AppState.isAdmin) {
+      // Non-admin users only see their own bookings
+      filteredBookings = filteredBookings.filter(booking => {
+        // Check if booking has userDetails with matching email
+        return booking.userDetails && 
+               booking.userDetails.email === AppState.userEmail;
+      });
+    }
+    
+    // Display message if no bookings
+    if (filteredBookings.length === 0) {
+      bookingsList.innerHTML = `
+        <div class="text-center" style="padding: 2.5rem 0; text-align: center;">
+          <i class="far fa-calendar-alt" style="color: #E5E7EB; font-size: 2rem; margin-bottom: 0.75rem;"></i>
+          <p style="color: #6B7280;">No ${AppState.currentBookingFilter} bookings found.</p>
+        </div>
+      `;
+      return;
+    }
+    
+    // Render each booking
+    filteredBookings.forEach(booking => {
+      const card = document.createElement('div');
+      card.className = 'booking-card';
+      
+      // Format date
+      const bookingDate = new Date(booking.date);
+      const formattedDate = bookingDate.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric'
+      });
+      
+      // Status badge class
+      let statusBadgeClass = '';
+      switch(booking.status) {
+        case 'CONFIRMED':
+          statusBadgeClass = 'badge-confirmed';
+          break;
+        case 'CANCELED':
+          statusBadgeClass = 'badge-canceled';
+          break;
+        case 'EXPIRED':
+          statusBadgeClass = 'badge-expired';
+          break;
+        default:
+          statusBadgeClass = 'badge-confirmed';
+      }
+      
+      // Payment method information
+      const paymentMethod = booking.paymentMethod || 'online';
+      const paymentStatus = booking.paymentStatus || 'completed';
+      
+      // Get payment method details if available
+      const paymentMethodObj = paymentMethods.find(m => m.id === paymentMethod);
+      const paymentMethodName = paymentMethodObj ? paymentMethodObj.name : Utils.capitalizeFirstLetter(paymentMethod);
+      
+      // Payment status badge
+      let paymentStatusBadge = '';
+      if (paymentMethod === 'cash' && paymentStatus === 'pending') {
+        paymentStatusBadge = `<span class="payment-badge payment-pending">Pay on arrival</span>`;
+      } else if (paymentStatus === 'completed') {
+        paymentStatusBadge = `<span class="payment-badge payment-completed">Paid</span>`;
+      } else if (paymentStatus === 'failed') {
+        paymentStatusBadge = `<span class="payment-badge payment-failed">Payment failed</span>`;
+      }
+      
+      // Check if booking can be canceled
+      const canCancel = booking.status === 'CONFIRMED' && 
+                        new Date(`${booking.date}T${booking.endTime}`) > new Date();
+      
+      // Prepare user information display
+      const userInfo = booking.userDetails ? `
+        <div class="detail-item">
+          <i class="fas fa-user"></i>
+          <span>${booking.userDetails.name}</span>
+        </div>
+      ` : '';
+      
+      // Admin-only: Show who created the booking if different from user
+      const createdByInfo = (AppState.isAdmin && 
+                           booking.createdBy && 
+                           booking.userDetails && 
+                           booking.createdBy.email !== booking.userDetails.email) ? `
+        <div class="detail-item admin-info">
+          <i class="fas fa-user-shield"></i>
+          <span>Booked by: ${booking.createdBy.email}</span>
+        </div>
+      ` : '';
+      
+      card.innerHTML = `
+        <div class="booking-header">
+          <h3 class="booking-title">${booking.resourceName}</h3>
+          <span class="booking-badge ${statusBadgeClass}">${booking.status}</span>
+        </div>
+        <div class="booking-details">
+          <div class="detail-item">
+            <i class="far fa-calendar-alt"></i>
+            <span>${formattedDate}</span>
+          </div>
+          <div class="detail-item">
+            <i class="far fa-clock"></i>
+            <span>${Utils.formatTime(booking.startTime)} - ${Utils.formatTime(booking.endTime)}</span>
+          </div>
+          <div class="detail-item">
+            <i class="fas fa-money-bill-wave"></i>
+            <span>EGP ${booking.price.toFixed(2)}</span>
+          </div>
+          <div class="detail-item">
+            <i class="fas fa-credit-card"></i>
+            <span>${paymentMethodName} ${paymentStatusBadge}</span>
+          </div>
+          ${userInfo}
+          ${createdByInfo}
+        </div>
+        ${canCancel ? `
+          <button class="btn btn-outline btn-danger" data-booking-id="${booking.id}">
+            Cancel Booking
+          </button>
+        ` : ''}
+      `;
+      
+      bookingsList.appendChild(card);
+      
+      // Add event listener to cancel button if present
+      if (canCancel) {
+        const cancelButton = card.querySelector('button[data-booking-id]');
+        if (cancelButton) {
+          cancelButton.addEventListener('click', () => {
+            CancelModal.open(booking.id);
+          });
+        }
+      }
+    });
+  }, 800);
+},
+  
+  // Time visualization
+  createTimeVisualization: () => {
+   // Create container for time visualization
+  const container = document.createElement('div');
+  container.className = 'time-visualization';
+  
+  // Create track
+  const track = document.createElement('div');
+  track.className = 'time-track';
+  container.appendChild(track);
+  
+  // Generate time labels based on business hours
+  const labels = document.createElement('div');
+  labels.className = 'time-labels';
+  
+  // Get business hours from CONFIG
+  const startHour = CONFIG.businessHours.start;
+  const endHour = CONFIG.businessHours.end;
+  
+  // Calculate how many labels to show (don't want too many to avoid crowding)
+  // We'll show approx 5-6 labels total including start and end
+  const totalHours = endHour - startHour;
+  const interval = Math.max(Math.floor(totalHours / 5), 1); // At least 1 hour intervals
+  
+  // Generate label HTML
+  let labelsHTML = '';
+  
+  // Always include the start hour
+  labelsHTML += `<span>${Utils.formatTime(startHour.toString().padStart(2, '0') + ':00')}</span>`;
+  
+  // Add intermediate labels
+  for (let hour = startHour + interval; hour < endHour; hour += interval) {
+    // Skip if too close to start or end to avoid crowding
+    if (hour > startHour + interval/2 && hour < endHour - interval/2) {
+      labelsHTML += `<span>${Utils.formatTime(hour.toString().padStart(2, '0') + ':00')}</span>`;
+    }
+  }
+  
+  // Always include the end hour
+  labelsHTML += `<span>${Utils.formatTime(endHour.toString().padStart(2, '0') + ':00')}</span>`;
+  
+  labels.innerHTML = labelsHTML;
+  container.appendChild(labels);
+  
+  // Create selection indicator
+  const selection = document.createElement('div');
+  selection.className = 'time-selection';
+  selection.style.display = 'none';
+  container.appendChild(selection);
+  
+  // Create booked segments container
+  const bookedContainer = document.createElement('div');
+  bookedContainer.className = 'time-booked';
+  container.appendChild(bookedContainer);
+  
+  return container;
+},
+  
+  updateTimeVisualization: (bookedSlots) => {
+    // Get or create the visualization container
+    let timeVisualization = document.querySelector('.time-visualization');
+    if (!timeVisualization) {
+      timeVisualization = UI.createTimeVisualization();
+      const timeSlots = DOM.byId('time-slots');
+      if (timeSlots) {
+        timeSlots.parentNode.insertBefore(timeVisualization, timeSlots.nextSibling);
+      }
+    }
+    
+    // Get or create the booked segments container
+    let timeBooked = timeVisualization.querySelector('.time-booked');
+    if (!timeBooked) {
+      timeBooked = document.createElement('div');
+      timeBooked.className = 'time-booked';
+      timeVisualization.appendChild(timeBooked);
+    }
+    
+    // Clear existing booked segments
+    timeBooked.innerHTML = '';
+    
+    // Reset time selection
+    const timeSelection = timeVisualization.querySelector('.time-selection');
+    if (timeSelection) {
+      timeSelection.style.display = 'none';
+    }
+    
+    // Calculate the total minutes in the day
+    const startOfDay = CONFIG.businessHours.start * 60; // 9 AM in minutes
+    const totalMinutes = (CONFIG.businessHours.end - CONFIG.businessHours.start) * 60;
+    
+    // Add booked slot indicators as separate child elements
+    bookedSlots.forEach(slot => {
+      const bookedStartMinutes = Utils.convertTimeToMinutes(slot.startTime);
+      const bookedEndMinutes = Utils.convertTimeToMinutes(slot.endTime);
+      
+      // Only show if within business hours
+      if (bookedEndMinutes <= startOfDay || bookedStartMinutes >= startOfDay + totalMinutes) {
+        return;
+      }
+      
+      // Adjust start/end to be within business hours if needed
+      const adjustedStart = Math.max(bookedStartMinutes, startOfDay);
+      const adjustedEnd = Math.min(bookedEndMinutes, startOfDay + totalMinutes);
+      
+      // Calculate position and width as percentages
+      const startPercentage = ((adjustedStart - startOfDay) / totalMinutes) * 100;
+      const endPercentage = ((adjustedEnd - startOfDay) / totalMinutes) * 100;
+      const width = endPercentage - startPercentage;
+      
+      // Create and position the indicator
+      const bookedSegment = document.createElement('div');
+      bookedSegment.className = 'time-booked-segment';
+      bookedSegment.style.left = `${startPercentage}%`;
+      bookedSegment.style.width = `${width}%`;
+      
+      timeBooked.appendChild(bookedSegment);
+    });
+  },
+  
+  updateTimeSelectionVisualization: (startTime, endTime) => {
+    if (!startTime || !endTime) return;
+    
+    const startMinutes = Utils.convertTimeToMinutes(startTime);
+    const endMinutes = Utils.convertTimeToMinutes(endTime);
+    
+    if (startMinutes >= endMinutes) return;
+    
+    // Get the visualization container
+    const timeVisualization = document.querySelector('.time-visualization');
+    if (!timeVisualization) return;
+    
+    // Get or create the selection bar
+    let timeSelection = timeVisualization.querySelector('.time-selection');
+    if (!timeSelection) {
+      timeSelection = document.createElement('div');
+      timeSelection.className = 'time-selection';
+      timeVisualization.appendChild(timeSelection);
+    }
+    
+    // Calculate the total minutes in the day
+    const startOfDay = CONFIG.businessHours.start * 60; // 9 AM in minutes
+    const totalMinutes = (CONFIG.businessHours.end - CONFIG.businessHours.start) * 60;
+    
+    // Calculate position and width as percentages
+    const startPercentage = ((startMinutes - startOfDay) / totalMinutes) * 100;
+    const endPercentage = ((endMinutes - startOfDay) / totalMinutes) * 100;
+    const width = endPercentage - startPercentage;
+    
+    // Update the selection bar
+    timeSelection.style.display = 'block';
+    timeSelection.style.left = `${startPercentage}%`;
+    timeSelection.style.width = `${width}%`;
+  }
+};
+
+// Function to handle the welcome banner
+function setupWelcomeBanner() {
+  // First, create and add the welcome banner container to the page if it doesn't exist
+  let welcomeBanner = document.getElementById('welcome-banner');
+  if (!welcomeBanner) {
+    welcomeBanner = document.createElement('div');
+    welcomeBanner.id = 'welcome-banner';
+    welcomeBanner.className = 'welcome-banner';
+    
+    // Insert at the top of the main content
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+      mainContent.insertBefore(welcomeBanner, mainContent.firstChild);
+    } else {
+      document.body.insertBefore(welcomeBanner, document.body.firstChild);
+    }
+  }
+  
+  // Update the banner content based on user state
+  if (AppState.isAdmin) {
+    welcomeBanner.innerHTML = `
+      <div class="banner-content admin-banner">
+        <i class="fas fa-shield-alt"></i>
+        <span>Admin Mode</span>
+      </div>
+    `;
+    welcomeBanner.style.display = 'block';
+  } else if (AppState.hasUserEmail()) {
+    welcomeBanner.innerHTML = `
+      <div class="banner-content user-banner">
+        <i class="fas fa-user"></i>
+        <span>Welcome, ${AppState.userEmail}</span>
+      </div>
+    `;
+    welcomeBanner.style.display = 'block';
+  } else {
+    welcomeBanner.style.display = 'none';
+  }
+}
+
+// ===== LOADING SCREENS & INDICATORS =====
+
+// Add this to your existing Utils or create a new LoadingManager object
+const LoadingManager = {
+  /**
+   * Show full page loading screen
+   * @param {string} title - Loading title
+   * @param {string} message - Loading message
+   */
+  showFullPageLoader: (title = 'Processing', message = 'Please wait while we process your request...') => {
+    // Check if loader already exists
+    let loader = document.querySelector('.full-page-loader');
+    
+    // Create loader if it doesn't exist
+    if (!loader) {
+      loader = document.createElement('div');
+      loader.className = 'full-page-loader';
+      
+      loader.innerHTML = `
+        <div class="loader-content">
+          <div class="loader-icon">
+            <div class="loader-spinner"></div>
+          </div>
+          <h3 class="loader-title">${title}</h3>
+          <p class="loader-message">${message}</p>
+        </div>
+      `;
+      
+      document.body.appendChild(loader);
+    } else {
+      // Update existing loader
+      loader.querySelector('.loader-title').textContent = title;
+      loader.querySelector('.loader-message').textContent = message;
+    }
+    
+    // Show loader (delay to ensure DOM is updated)
+    setTimeout(() => {
+      loader.classList.add('active');
+    }, 10);
+  },
+  
+  /**
+   * Hide full page loading screen
+   */
+  hideFullPageLoader: () => {
+    const loader = document.querySelector('.full-page-loader');
+    if (loader) {
+      loader.classList.remove('active');
+    }
+  },
+  
+  /**
+   * Show loading indicator in a button
+   * @param {string|HTMLElement} buttonSelector - Button element or selector
+   */
+  showButtonLoader: (buttonSelector) => {
+    const button = typeof buttonSelector === 'string' 
+      ? document.querySelector(buttonSelector) 
+      : buttonSelector;
+    
+    if (button) {
+      // Save original text
+      button.dataset.originalText = button.innerHTML;
+      // Add loading class
+      button.classList.add('btn-loader', 'loading');
+      // Disable button
+      button.disabled = true;
+    }
+  },
+  
+  /**
+   * Hide loading indicator from a button
+   * @param {string|HTMLElement} buttonSelector - Button element or selector
+   */
+  hideButtonLoader: (buttonSelector) => {
+    const button = typeof buttonSelector === 'string' 
+      ? document.querySelector(buttonSelector) 
+      : buttonSelector;
+    
+    if (button) {
+      // Remove loading class
+      button.classList.remove('btn-loader', 'loading');
+      // Restore original text
+      if (button.dataset.originalText) {
+        button.innerHTML = button.dataset.originalText;
+      }
+      // Enable button
+      button.disabled = false;
+    }
+  },
+  
+  /**
+   * Show loading indicator in a specific section
+   * @param {string|HTMLElement} containerSelector - Container element or selector
+   */
+  showSectionLoader: (containerSelector) => {
+    const container = typeof containerSelector === 'string' 
+      ? document.querySelector(containerSelector) 
+      : containerSelector;
+    
+    if (container) {
+      // Add positioning class if not present
+      container.classList.add('has-loader');
+      
+      // Check if loader already exists
+      let loader = container.querySelector('.section-loader');
+      
+      // Create loader if it doesn't exist
+      if (!loader) {
+        loader = document.createElement('div');
+        loader.className = 'section-loader';
+        loader.innerHTML = '<div class="section-spinner"></div>';
+        container.appendChild(loader);
+      }
+      
+      // Show loader
+      setTimeout(() => {
+        loader.classList.add('active');
+      }, 10);
+    }
+  },
+  
+  /**
+   * Hide loading indicator from a section
+   * @param {string|HTMLElement} containerSelector - Container element or selector
+   */
+  hideSectionLoader: (containerSelector) => {
+    const container = typeof containerSelector === 'string' 
+      ? document.querySelector(containerSelector) 
+      : containerSelector;
+    
+    if (container) {
+      const loader = container.querySelector('.section-loader');
+      if (loader) {
+        loader.classList.remove('active');
+      }
+    }
+  },
+  
+  /**
+   * Create skeleton loaders for content
+   * @param {string|HTMLElement} containerSelector - Container element or selector
+   * @param {string} type - Type of skeleton ('text', 'circle', 'rect')
+   * @param {number} count - Number of skeleton items to create
+   */
+  showSkeletonLoader: (containerSelector, type = 'text', count = 1) => {
+    const container = typeof containerSelector === 'string' 
+      ? document.querySelector(containerSelector) 
+      : containerSelector;
+    
+    if (container) {
+      // Clear container
+      container.innerHTML = '';
+      
+      // Create skeleton items
+      for (let i = 0; i < count; i++) {
+        const skeletonItem = document.createElement('div');
+        skeletonItem.className = `skeleton-loader ${type === 'circle' ? 'skeleton-circle' : type === 'rect' ? 'skeleton-rect' : ''}`;
+        
+        // Add margin to separate items
+        if (i < count - 1) {
+          skeletonItem.style.marginBottom = '10px';
+        }
+        
+        container.appendChild(skeletonItem);
+      }
+    }
+  },
+  
+  /**
+   * Remove skeleton loaders
+   * @param {string|HTMLElement} containerSelector - Container element or selector
+   */
+  hideSkeletonLoader: (containerSelector) => {
+    const container = typeof containerSelector === 'string' 
+      ? document.querySelector(containerSelector) 
+      : containerSelector;
+    
+    if (container) {
+      // Remove all skeleton loaders
+      const skeletons = container.querySelectorAll('.skeleton-loader');
+      skeletons.forEach(skeleton => skeleton.remove());
+    }
+  }
+};
+
+// ===== BOOKING MODAL =====
+const BookingModal = {
+  open: (resourceId) => {
+    if (!resourceId) {
+      console.error('Resource ID is required');
+      return;
+    }
+    
+    AppState.currentResourceId = resourceId;
+    const resource = resources.find(r => r.id === resourceId);
+    
+    if (!resource) {
+      console.error('Resource not found:', resourceId);
+      Toast.show('error', 'Resource not found');
+      return;
+    }
+    
+    // Set the room label from the resource
+    AppState.setResourceLabel(resource.label);
+
+    // Reset modal state
+    BookingModal.resetState();
+    
+    // Update modal title
+    const modalTitle = DOM.byId('modal-title');
+    if (modalTitle) {
+      modalTitle.textContent = `Book ${resource.name}`;
+    }
+    
+    // Show step 1
+    BookingModal.hideAllSteps();
+    const bookingStep1 = DOM.byId('booking-step-1');
+    if (bookingStep1) {
+      // Initialize modern booking interface
+      BookingModal.initializeInterface();
+      DOM.show(bookingStep1);
+    }
+    
+    // Show modal
+    const bookingModal = DOM.byId('booking-modal');
+    if (bookingModal) {
+      DOM.addClass(bookingModal, 'active');
+      document.body.style.overflow = 'hidden';
+    }
+  },
+  
+  hide: () => {
+    const bookingModal = DOM.byId('booking-modal');
+    if (bookingModal) {
+      DOM.removeClass(bookingModal, 'active');
+      document.body.style.overflow = '';
+    }
+  },
+  
+  resetState: () => {
+    AppState.selectedDateValue = null;
+    AppState.selectedTimeSlot = null;
+    AppState.selectedPaymentMethod = null;
+    AppState.uploadedFile = null;
+    
+    // Reset the time visualization
+    const timeSelection = document.querySelector('.time-selection');
+    if (timeSelection) {
+      timeSelection.style.display = 'none';
+      timeSelection.style.left = '0';
+      timeSelection.style.width = '0';
+    }
+    
+    // Reset booked segments
+    const timeBooked = document.querySelector('.time-booked');
+    if (timeBooked) {
+      timeBooked.innerHTML = '';
+    }
+    
+    // Reset time slots
+    document.querySelectorAll('.time-slot').forEach(slot => {
+      slot.classList.remove('selected', 'start-selected', 'end-selected', 'in-range');
+    });
+    
+    // Reset selection summary
+    const selectionSummary = DOM.byId('selection-summary');
+    if (selectionSummary) {
+      DOM.hide(selectionSummary);
+    }
+    
+    // Disable action buttons
+    const continueButton = DOM.byId('continue-to-payment');
+    if (continueButton) {
+      continueButton.disabled = true;
+    }
+    
+    const proceedButton = DOM.byId('proceed-to-payment');
+    if (proceedButton) {
+      proceedButton.disabled = true;
+    }
+    
+    const verifyButton = DOM.byId('verify-payment');
+    if (verifyButton) {
+      verifyButton.disabled = true;
+    }
+    
+    // Reset file upload if present
+    const fileInput = DOM.byId('payment-screenshot');
+    if (fileInput) {
+      fileInput.value = '';
+    }
+    
+    // Reset file preview
+    const filePreview = DOM.byId('file-preview');
+    const uploadInstructions = DOM.byId('upload-instructions');
+    if (filePreview && uploadInstructions) {
+      DOM.hide(filePreview);
+      DOM.show(uploadInstructions);
+    }
+    
+    // Reset verification status if present
+    const verificationStatus = DOM.byId('verification-status');
+    if (verificationStatus) {
+      DOM.hide(verificationStatus);
+    }
+    
+    // Hide confirmation button
+    const confirmationAction = DOM.byId('confirmation-action');
+    if (confirmationAction) {
+      DOM.hide(confirmationAction);
+    }
+  },
+  
+  hideAllSteps: () => {
+    const steps = [
+      DOM.byId('booking-step-1'),
+      DOM.byId('booking-step-2'),
+      DOM.byId('booking-step-3'),
+      DOM.byId('booking-step-4'),
+      DOM.byId('booking-step-5')
+    ];
+    
+    steps.forEach(step => {
+      if (step) {
+        DOM.hide(step);
+      }
+    });
+  },
+  
+  initializeInterface: () => {
+    // Clean up any existing time visualization first
+    const existingTimeVis = document.querySelector('.time-visualization');
+    if (existingTimeVis) {
+      existingTimeVis.remove();
+    }
+    
+    // Initialize date selection
+    BookingModal.initializeDateSelection();
+    
+    // Initialize time slots
+    BookingModal.initializeTimeSlots();
+  },
+  
+  initializeDateSelection: () => {
+    const dateButtons = DOM.byId('date-buttons');
+    if (!dateButtons) return;
+    
+    dateButtons.innerHTML = '';
+    
+    const today = new Date();
+    const daysToShow = 14;
+    
+    for (let i = 0; i < daysToShow; i++) {
+      const date = new Date(today);
+      date.setDate(today.getDate() + i);
+      
+      const dateButton = document.createElement('button');
+      dateButton.className = 'date-button ' + (i === 0 ? 'selected' : '');
+      dateButton.dataset.date = date.toISOString().split('T')[0];
+      
+      const month = date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+      const day = date.getDate();
+      const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
+      
+      dateButton.innerHTML = `
+        <span class="date-month">${month}</span>
+        <span class="date-day">${day}</span>
+        <span class="date-weekday">${weekday}</span>
+      `;
+      
+      dateButton.addEventListener('click', () => {
+        document.querySelectorAll('.date-button').forEach(btn => {
+          DOM.removeClass(btn, 'selected');
+        });
+        
+        DOM.addClass(dateButton, 'selected');
+        AppState.selectedDateValue = dateButton.dataset.date;
+        
+        // Update available time slots based on selected date
+        BookingModal.updateAvailableTimeSlots();
+      });
+      
+      dateButtons.appendChild(dateButton);
+    }
+    
+    // Set initial selected date
+    AppState.selectedDateValue = today.toISOString().split('T')[0];
+    
+    // Setup carousel navigation
+    const prevBtn = DOM.byId('date-prev');
+    const nextBtn = DOM.byId('date-next');
+    
+    if (prevBtn && nextBtn) {
+      prevBtn.addEventListener('click', () => {
+        dateButtons.scrollBy({ left: -300, behavior: 'smooth' });
+      });
+      
+      nextBtn.addEventListener('click', () => {
+        dateButtons.scrollBy({ left: 300, behavior: 'smooth' });
+      });
+    }
+  },
+  
+  initializeTimeSlots: () => {
+   const timeSlotsContainer = DOM.byId('time-slots');
+  if (!timeSlotsContainer) return;
+  
+  timeSlotsContainer.innerHTML = '';
+  
+  // Business hours from CONFIG
+  const startHour = CONFIG.businessHours.start; // 9:00 AM
+  const endHour = CONFIG.businessHours.end;     // 23:00 (11:00 PM)
+  
+  // Slot selection state
+  let selectionStart = null;
+  let selectionEnd = null;
+  
+  // Generate time slots in 30-minute increments
+  // Important: Loop should run all the way to endHour (including the final hour)
+  for (let hour = startHour; hour <= endHour; hour++) {
+    // Create slot for the hour (XX:00)
+    if (hour <= endHour) { // Only create hour slot if not the end hour
+      const hourTimeString = `${hour.toString().padStart(2, '0')}:00`;
+      const hourDisplayTime = Utils.formatTime(hourTimeString);
+      
+      const hourSlot = document.createElement('div');
+      hourSlot.className = 'time-slot';
+      hourSlot.dataset.time = hourTimeString;
+      hourSlot.textContent = hourDisplayTime;
+      
+      // Add the hour slot
+      timeSlotsContainer.appendChild(hourSlot);
+    }
+    
+    // Create slot for the half hour (XX:30) if it's not the end hour
+    if (hour < endHour) {
+      const halfHourTimeString = `${hour.toString().padStart(2, '0')}:30`;
+      const halfHourDisplayTime = Utils.formatTime(halfHourTimeString);
+      
+      const halfHourSlot = document.createElement('div');
+      halfHourSlot.className = 'time-slot half-hour-slot';
+      halfHourSlot.dataset.time = halfHourTimeString;
+      halfHourSlot.textContent = halfHourDisplayTime;
+      
+      // Add the half hour slot
+      timeSlotsContainer.appendChild(halfHourSlot);
+    }
+  }
+  
+  // Add click handlers to all time slots
+  document.querySelectorAll('.time-slot').forEach(slot => {
+    slot.addEventListener('click', function() {
+      if (this.classList.contains('booked')) return;
+      
+      // Reset selection if clicking a new slot without a start
+      if (!selectionStart) {
+        // Clear all selections
+        document.querySelectorAll('.time-slot').forEach(s => {
+          s.classList.remove('start-selected', 'end-selected', 'in-range', 'selected');
+        });
+        
+        // Reset time visualization
+        const timeSelection = document.querySelector('.time-selection');
+        if (timeSelection) {
+          timeSelection.style.display = 'none';
+        }
+        
+        // Set as start time
+        selectionStart = this.dataset.time;
+        this.classList.add('start-selected');
+      } 
+      // If we have a start but no end
+      else if (selectionStart && !selectionEnd) {
+        const startTime = Utils.convertTimeToMinutes(selectionStart);
+        const currentTime = Utils.convertTimeToMinutes(this.dataset.time);
+        
+        // Ensure end time is after start time
+        if (currentTime <= startTime) {
+          // Clicked on or before start time - reset and set as new start
+          document.querySelectorAll('.time-slot').forEach(s => {
+            s.classList.remove('start-selected', 'end-selected', 'in-range', 'selected');
+          });
+          
+          selectionStart = this.dataset.time;
+          selectionEnd = null;
+          this.classList.add('start-selected');
+          return;
+        }
+        
+        // Check if there's any booked slot between start and current
+        const hasBookedInRange = Array.from(document.querySelectorAll('.time-slot.booked')).some(slot => {
+          const slotTime = Utils.convertTimeToMinutes(slot.dataset.time);
+          return slotTime > startTime && slotTime < currentTime;
+        });
+        
+        if (hasBookedInRange) {
+          Toast.show('error', 'Cannot select a range that includes booked slots');
+          return;
+        }
+        
+        // Set as end time
+        selectionEnd = this.dataset.time;
+        this.classList.add('end-selected');
+        
+        // Mark all slots in between
+        document.querySelectorAll('.time-slot').forEach(s => {
+          const slotTime = Utils.convertTimeToMinutes(s.dataset.time);
+          if (slotTime > startTime && slotTime < currentTime) {
+            s.classList.add('in-range');
+          }
+        });
+        
+        // Create selected time slot object
+        const resource = resources.find(r => r.id === AppState.currentResourceId);
+        if (resource) {
+          const startTime = selectionStart;
+          const endTime = selectionEnd;
+          
+          // Calculate duration in hours
+          const startMinutes = Utils.convertTimeToMinutes(startTime);
+          const endMinutes = Utils.convertTimeToMinutes(endTime);
+          const durationHours = (endMinutes - startMinutes) / 60;
+          const durationFormatted = Utils.formatDuration(durationHours);
+          
+          // Calculate price
+          const pricePerHour = resource.pricePerHour;
+          const price = durationHours * pricePerHour;
+          
+          AppState.selectedTimeSlot = {
+            date: AppState.selectedDateValue,
+            startTime: startTime,
+            endTime: endTime,
+            duration: durationHours,
+            durationFormatted: durationFormatted,
+            price: price
+          };
+          
+          // Update selection summary
+          BookingModal.updateSelectionSummary();
+          
+          // Enable continue button
+          const continueButton = DOM.byId('continue-to-payment');
+          if (continueButton) continueButton.disabled = false;
+          
+          // Update time visualization
+          UI.updateTimeSelectionVisualization(startTime, endTime);
+        }
+      } 
+      // If we have both start and end (complete selection)
+      else {
+        // Reset selection
+        document.querySelectorAll('.time-slot').forEach(s => {
+          s.classList.remove('start-selected', 'end-selected', 'in-range', 'selected');
+        });
+        
+        selectionStart = this.dataset.time;
+        selectionEnd = null;
+        this.classList.add('start-selected');
+        
+        // Hide selection summary when starting a new selection
+        const selectionSummary = DOM.byId('selection-summary');
+        if (selectionSummary) DOM.hide(selectionSummary);
+        
+        // Disable continue button
+        const continueButton = DOM.byId('continue-to-payment');
+        if (continueButton) continueButton.disabled = true;
+        
+        // Clear time visualization
+        const timeSelection = document.querySelector('.time-selection');
+        if (timeSelection) timeSelection.style.display = 'none';
+        
+        // Reset selected time slot
+        AppState.selectedTimeSlot = null;
+      }
+    });
+  });
+  
+  // Create and add new time visualization
+  const timeVisElement = DOM.byId('time-visualization');
+  if (timeVisElement) {
+    timeVisElement.innerHTML = ''; // Clear any existing content
+    const visualization = UI.createTimeVisualization();
+    timeVisElement.appendChild(visualization);
+  }
+  
+  // Add change button event listener
+  const changeSelectionButton = DOM.byId('change-selection');
+  if (changeSelectionButton) {
+    changeSelectionButton.addEventListener('click', () => {
+      // Reset selection
+      document.querySelectorAll('.time-slot').forEach(s => {
+        s.classList.remove('start-selected', 'end-selected', 'in-range', 'selected');
+      });
+      
+      selectionStart = null;
+      selectionEnd = null;
+      
+      // Hide selection summary
+      const selectionSummary = DOM.byId('selection-summary');
+      if (selectionSummary) DOM.hide(selectionSummary);
+      
+      // Disable continue button
+      const continueButton = DOM.byId('continue-to-payment');
+      if (continueButton) continueButton.disabled = true;
+      
+      // Clear time visualization
+      const timeSelection = document.querySelector('.time-selection');
+      if (timeSelection) timeSelection.style.display = 'none';
+      
+      // Reset selected time slot
+      AppState.selectedTimeSlot = null;
+    });
+  }
+  
+  // Initial update of available slots
+  BookingModal.updateAvailableTimeSlots();
+},
+  
+  updateAvailableTimeSlots: () => {
+    if (!AppState.selectedDateValue || !AppState.currentResourceId) return;
+  
+  // Get booked slots for the selected resource and date
+  const resourceBookedSlots = bookedSlots.filter(slot => 
+    slot.resourceId === AppState.currentResourceId && 
+    slot.date === AppState.selectedDateValue
+  );
+  
+  // Reset all slots to available
+  document.querySelectorAll('.time-slot').forEach(slot => {
+    DOM.removeClass(slot, 'booked');
+    DOM.removeClass(slot, 'start-selected');
+    DOM.removeClass(slot, 'end-selected');
+    DOM.removeClass(slot, 'in-range');
+    DOM.removeClass(slot, 'selected');
+  });
+  
+  // Mark booked time slots
+  resourceBookedSlots.forEach(bookedSlot => {
+    const bookedStartMinutes = Utils.convertTimeToMinutes(bookedSlot.startTime);
+    const bookedEndMinutes = Utils.convertTimeToMinutes(bookedSlot.endTime);
+    
+    document.querySelectorAll('.time-slot').forEach(slot => {
+      const slotMinutes = Utils.convertTimeToMinutes(slot.dataset.time);
+      const slotEndMinutes = slotMinutes + 30; // Each slot represents 30 minutes
+      
+      // Mark as booked if the slot overlaps with a booked time range
+      // This is a more complex check for 30-minute slots
+      if ((slotMinutes >= bookedStartMinutes && slotMinutes < bookedEndMinutes) || 
+          (slotEndMinutes > bookedStartMinutes && slotEndMinutes <= bookedEndMinutes) ||
+          (slotMinutes <= bookedStartMinutes && slotEndMinutes >= bookedEndMinutes)) {
+        DOM.addClass(slot, 'booked');
+      }
+    });
+  });
+  
+  // Update the time visualization
+  UI.updateTimeVisualization(resourceBookedSlots);
+  
+  // Reset selection
+  AppState.selectedTimeSlot = null;
+  
+  // Hide selection summary
+  const selectionSummary = DOM.byId('selection-summary');
+  if (selectionSummary) DOM.hide(selectionSummary);
+  
+  // Disable continue button
+  const continueButton = DOM.byId('continue-to-payment');
+  if (continueButton) {
+    continueButton.disabled = true;
+  }
+},
+  
+  updateSelectionSummary: () => {
+    if (!AppState.selectedTimeSlot) return;
+    
+    // Show selection summary
+    const selectionSummary = DOM.byId('selection-summary');
+    if (selectionSummary) {
+      const selectedDate = DOM.byId('selected-date');
+      const selectedTime = DOM.byId('selected-time');
+      
+      if (selectedDate && selectedTime) {
+        const dateObj = new Date(AppState.selectedTimeSlot.date);
+        const formattedDate = dateObj.toLocaleDateString('en-US', {
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric'
+        });
+        
+        selectedDate.querySelector('span').textContent = formattedDate;
+        selectedTime.querySelector('span').textContent = `${Utils.formatTime(AppState.selectedTimeSlot.startTime)} - ${Utils.formatTime(AppState.selectedTimeSlot.endTime)} (${AppState.selectedTimeSlot.durationFormatted})`;
+        
+        DOM.show(selectionSummary);
+      }
+    }
+  },
+  
+goToPaymentSelection: () => {
+  if (!AppState.selectedTimeSlot) {
+    Toast.show('error', 'Please select a time slot');
+    return;
+  }
+  
+  // Update booking summary
+  BookingModal.updateBookingSummary();
+  
+  // Generate payment methods
+  BookingModal.generatePaymentMethods();
+  
+  // Show step 2
+  BookingModal.hideAllSteps();
+  DOM.show(DOM.byId('booking-step-2'));
+},
+
+  // Add after line 1069 (after the closing bracket of goToPaymentSelection)
+  // continueToPayment: () => {
+  //   if (!AppState.selectedTimeSlot) {
+  //     Toast.show('error', 'Please select a time slot');
+  //     return;
+  //   }
+    
+  //   // Show identification form first instead of directly going to payment
+  //   BookingModal.showUserIdentificationForm();
+  // },
+
+  continueToPayment: () => {
+  if (!AppState.selectedTimeSlot) {
+    Toast.show('error', 'Please select a time slot');
+    return;
+  }
+  
+  console.log("Continue to payment called");
+  
+  // CONDITION 1: Skip form entirely if user email exists and not admin
+  if (!AppState.isAdmin && AppState.hasUserEmail()) {
+    console.log("User email already provided, skipping form:", AppState.userEmail);
+    // Go directly to payment selection
+    BookingModal.goToPaymentSelection();
+    return;
+  }
+  
+  // Hide all existing steps
+  BookingModal.hideAllSteps();
+  
+  // Create a new custom identification form with vanilla JS
+  const stepDiv = document.createElement('div');
+  stepDiv.id = 'fixed-identification-step';
+  stepDiv.className = 'booking-step';
+  stepDiv.style.display = 'block';
+  
+  // CONDITION 2: Different form for admin vs regular user
+  if (AppState.isAdmin) {
+    console.log("Admin mode detected, showing user selection form");
+    
+    // Create admin version with user selection dropdown
+    stepDiv.innerHTML = `
+      <div class="step-header">
+        <h3>Select or Add User</h3>
+        <p>Choose an existing user or add a new one for this booking.</p>
+      </div>
+      
+      <div class="user-selection-container">
+        <div class="user-selection-toggle">
+          <button id="existing-user-toggle" class="toggle-btn active">Existing User</button>
+          <button id="new-user-toggle" class="toggle-btn">New User</button>
+        </div>
+        
+        <div id="existing-user-form" class="user-form">
+          <div class="form-group">
+            <label for="fixed-email-select">User Email</label>
+            <div class="autocomplete-container">
+              <input type="email" id="fixed-email-select" class="form-control" placeholder="Search by email..." required>
+              <div id="autocomplete-results" class="autocomplete-results"></div>
+            </div>
+          </div>
+          
+          <div class="user-details-preview">
+            <div class="form-group">
+              <label>Name</label>
+              <p id="preview-name" class="form-preview">-</p>
+            </div>
+            <div class="form-group">
+              <label>Phone</label>
+              <p id="preview-phone" class="form-preview">-</p>
+            </div>
+            <div class="form-group">
+              <label>Discount</label>
+              <p id="preview-discount" class="form-preview">-</p>
+            </div>
+          </div>
+        </div>
+        
+        <div id="new-user-form" class="user-form" style="display:none;">
+          <div class="form-group">
+            <label for="fixed-new-email">Email</label>
+            <input type="email" id="fixed-new-email" class="form-control" placeholder="user@example.com" required>
+          </div>
+          <div class="form-group">
+            <label for="fixed-new-name">Name</label>
+            <input type="text" id="fixed-new-name" class="form-control" placeholder="Full Name" required>
+          </div>
+          <div class="form-group">
+            <label for="fixed-new-phone">Phone</label>
+            <input type="tel" id="fixed-new-phone" class="form-control" placeholder="+20 xxx xxx xxxx" required>
+          </div>
+          <div class="form-group">
+            <label for="fixed-new-discount">Discount (%)</label>
+            <input type="number" id="fixed-new-discount" class="form-control" placeholder="0" min="0" max="100" value="0">
+          </div>
+        </div>
+      </div>
+    `;
+  } else {
+    // Regular user version - simpler form
+    stepDiv.innerHTML = `
+      <div class="step-header">
+        <h3>Your Information</h3>
+        <p>Please provide your contact details for this booking.</p>
+      </div>
+      
+      <div class="user-form">
+        <div class="form-group">
+          <label for="fixed-email">Email</label>
+          <input type="email" id="fixed-email" class="form-control" placeholder="your@email.com" required>
+        </div>
+        <div class="form-group">
+          <label for="fixed-name">Full Name</label>
+          <input type="text" id="fixed-name" class="form-control" placeholder="Your Name" required>
+        </div>
+        <div class="form-group">
+          <label for="fixed-phone">Phone Number</label>
+          <input type="tel" id="fixed-phone" class="form-control" placeholder="+20 xxx xxx xxxx" required>
+        </div>
+      </div>
+    `;
+  }
+  
+  // Add action buttons for both admin and regular forms
+  stepDiv.innerHTML += `
+    <div class="form-actions">
+      <button id="fixed-back" class="btn btn-outline">Back</button>
+      <button id="fixed-continue" class="btn btn-primary">Continue</button>
+    </div>
+  `;
+  
+  // Add to modal content
+  const modalContent = document.querySelector('.modal-content');
+  modalContent.appendChild(stepDiv);
+  
+  // Set up toggle functionality for admin form
+  if (AppState.isAdmin) {
+    const existingToggle = document.getElementById('existing-user-toggle');
+    const newToggle = document.getElementById('new-user-toggle');
+    const existingForm = document.getElementById('existing-user-form');
+    const newForm = document.getElementById('new-user-form');
+    
+    if (existingToggle && newToggle && existingForm && newForm) {
+      // Set up toggle buttons
+      existingToggle.addEventListener('click', function() {
+        existingToggle.classList.add('active');
+        newToggle.classList.remove('active');
+        existingForm.style.display = 'block';
+        newForm.style.display = 'none';
+      });
+      
+      newToggle.addEventListener('click', function() {
+        newToggle.classList.add('active');
+        existingToggle.classList.remove('active');
+        newForm.style.display = 'block';
+        existingForm.style.display = 'none';
+      });
+      
+      // Set up autocomplete with user data
+      const emailSelect = document.getElementById('fixed-email-select');
+      const autocompleteResults = document.getElementById('autocomplete-results');
+      const usersData = window.appUsers || []; // Default to empty array if no global variable
+      
+      if (emailSelect && autocompleteResults) {
+        // Input event for real-time filtering
+        emailSelect.addEventListener('input', function() {
+          const value = this.value.toLowerCase();
+          autocompleteResults.innerHTML = '';
+          
+          if (!value) {
+            autocompleteResults.style.display = 'none';
+            return;
+          }
+          
+          // Filter users that match the input value
+          const matches = usersData.filter(user => 
+            user.email.toLowerCase().includes(value) || 
+            (user.name && user.name.toLowerCase().includes(value))
+          ).slice(0, 5); // Limit to 5 results
+          
+          if (matches.length > 0) {
+            autocompleteResults.style.display = 'block';
+            
+            // Create result items
+            matches.forEach(user => {
+              const item = document.createElement('div');
+              item.className = 'autocomplete-item';
+              item.innerHTML = `
+                <div class="user-email">${user.email}</div>
+                <div class="user-name">${user.name || ''}</div>
+              `;
+              
+              // Click on result to select user
+              item.addEventListener('click', function() {
+                emailSelect.value = user.email;
+                
+                // Update preview
+                document.getElementById('preview-name').textContent = user.name || '-';
+                document.getElementById('preview-phone').textContent = user.phone || '-';
+                document.getElementById('preview-discount').textContent = 
+                  user.discount !== undefined ? `${user.discount}%` : '0%';
+                
+                // Hide results
+                autocompleteResults.style.display = 'none';
+              });
+              
+              autocompleteResults.appendChild(item);
+            });
+          } else {
+            // No matches found
+            const noResults = document.createElement('div');
+            noResults.className = 'autocomplete-item';
+            noResults.textContent = 'No matching users found';
+            autocompleteResults.appendChild(noResults);
+            autocompleteResults.style.display = 'block';
+          }
+        });
+        
+        // Close autocomplete when clicking outside
+        document.addEventListener('click', function(e) {
+          if (e.target !== emailSelect && !autocompleteResults.contains(e.target)) {
+            autocompleteResults.style.display = 'none';
+          }
+        });
+        
+        // Initialize with first 5 users
+        if (usersData.length > 0) {
+          const initialUsers = usersData.slice(0, 5);
+          
+          initialUsers.forEach(user => {
+            const item = document.createElement('div');
+            item.className = 'autocomplete-item';
+            item.innerHTML = `
+              <div class="user-email">${user.email}</div>
+              <div class="user-name">${user.name || ''}</div>
+            `;
+            
+            item.addEventListener('click', function() {
+              emailSelect.value = user.email;
+              document.getElementById('preview-name').textContent = user.name || '-';
+              document.getElementById('preview-phone').textContent = user.phone || '-';
+              document.getElementById('preview-discount').textContent = 
+                user.discount !== undefined ? `${user.discount}%` : '0%';
+              autocompleteResults.style.display = 'none';
+            });
+            
+            autocompleteResults.appendChild(item);
+          });
+          
+          // Show initial dropdown when field is focused
+          emailSelect.addEventListener('focus', function() {
+            if (autocompleteResults.children.length > 0) {
+              autocompleteResults.style.display = 'block';
+            }
+          });
+        }
+      }
+    }
+  }
+  
+  // Pre-fill regular user form if values exist
+  if (!AppState.isAdmin) {
+    if (AppState.userEmail) {
+      const emailInput = document.getElementById('fixed-email');
+      if (emailInput) emailInput.value = AppState.userEmail;
+    }
+    if (AppState.userName) {
+      const nameInput = document.getElementById('fixed-name');
+      if (nameInput) nameInput.value = AppState.userName;
+    }
+    if (AppState.userPhone) {
+      const phoneInput = document.getElementById('fixed-phone');
+      if (phoneInput) phoneInput.value = AppState.userPhone;
+    }
+  }
+  
+  // Add back button event listener
+  const backButton = document.getElementById('fixed-back');
+  if (backButton) {
+    backButton.addEventListener('click', function() {
+      // Clean up our custom step
+      stepDiv.remove();
+      
+      // Show step 1 again
+      const step1 = document.getElementById('booking-step-1');
+      if (step1) step1.style.display = 'block';
+    });
+  }
+  
+  // Add continue button event listener
+  const continueButton = document.getElementById('fixed-continue');
+  if (continueButton) {
+    continueButton.addEventListener('click', function() {
+      // Clear any previous errors
+      document.querySelectorAll('.error-message').forEach(el => el.remove());
+      document.querySelectorAll('input').forEach(inp => inp.style.borderColor = '');
+      
+      let isValid = true;
+      let userData = {};
+      
+      // Handle different validation based on user type and form mode
+      if (AppState.isAdmin) {
+        // Check which form is active
+        const existingToggle = document.getElementById('existing-user-toggle');
+        if (existingToggle && existingToggle.classList.contains('active')) {
+          // Existing user form
+          const emailInput = document.getElementById('fixed-email-select');
+          const previewName = document.getElementById('preview-name');
+          const previewPhone = document.getElementById('preview-phone');
+          const previewDiscount = document.getElementById('preview-discount');
+          
+          if (!emailInput || !emailInput.value.trim()) {
+            showInputError(emailInput, "Please select a user");
+            isValid = false;
+          } else {
+            // Get discount as number
+            let discount = 0;
+            if (previewDiscount) {
+              const discountText = previewDiscount.textContent;
+              if (discountText && discountText !== '-') {
+                discount = parseInt(discountText);
+              }
+            }
+            
+            userData = {
+              email: emailInput.value.trim(),
+              name: previewName ? previewName.textContent !== '-' ? previewName.textContent : '' : '',
+              phone: previewPhone ? previewPhone.textContent !== '-' ? previewPhone.textContent : '' : '',
+              discount: isNaN(discount) ? 0 : discount
+            };
+          }
+        } else {
+          // New user form
+          const emailInput = document.getElementById('fixed-new-email');
+          const nameInput = document.getElementById('fixed-new-name');
+          const phoneInput = document.getElementById('fixed-new-phone');
+          const discountInput = document.getElementById('fixed-new-discount');
+          
+          // Email validation
+          if (!emailInput || !emailInput.value.trim()) {
+            showInputError(emailInput, "Email is required");
+            isValid = false;
+          } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput.value.trim())) {
+            showInputError(emailInput, "Please enter a valid email");
+            isValid = false;
+          }
+          
+          // Name validation
+          if (!nameInput || !nameInput.value.trim()) {
+            showInputError(nameInput, "Name is required");
+            isValid = false;
+          } else if (nameInput.value.trim().length < 2) {
+            showInputError(nameInput, "Name must be at least 2 characters");
+            isValid = false;
+          }
+          
+          // Phone validation
+          if (!phoneInput || !phoneInput.value.trim()) {
+            showInputError(phoneInput, "Phone number is required");
+            isValid = false;
+          } else if (!/^\+?[\d\s-]{8,}$/.test(phoneInput.value.trim())) {
+            showInputError(phoneInput, "Please enter a valid phone number");
+            isValid = false;
+          }
+          
+          if (isValid) {
+            userData = {
+              email: emailInput.value.trim(),
+              name: nameInput.value.trim(),
+              phone: phoneInput.value.trim(),
+              discount: discountInput ? parseInt(discountInput.value || 0) : 0
+            };
+            
+            // Add the new user to the global users array if it exists
+            if (typeof window.addUser === 'function') {
+              window.addUser(userData);
+            } else if (window.appUsers) {
+              // Fallback if addUser function doesn't exist
+              const existingIndex = window.appUsers.findIndex(u => 
+                u.email.toLowerCase() === userData.email.toLowerCase()
+              );
+              
+              if (existingIndex >= 0) {
+                window.appUsers[existingIndex] = userData;
+              } else {
+                window.appUsers.push(userData);
+              }
+            }
+          }
+        }
+      } else {
+        // Regular user form validation
+        const emailInput = document.getElementById('fixed-email');
+        const nameInput = document.getElementById('fixed-name');
+        const phoneInput = document.getElementById('fixed-phone');
+        
+        // Email validation
+        if (!emailInput || !emailInput.value.trim()) {
+          showInputError(emailInput, "Email is required");
+          isValid = false;
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput.value.trim())) {
+          showInputError(emailInput, "Please enter a valid email");
+          isValid = false;
+        }
+        
+        // Name validation
+        if (!nameInput || !nameInput.value.trim()) {
+          showInputError(nameInput, "Name is required");
+          isValid = false;
+        } else if (nameInput.value.trim().length < 2) {
+          showInputError(nameInput, "Name must be at least 2 characters");
+          isValid = false;
+        }
+        
+        // Phone validation
+        if (!phoneInput || !phoneInput.value.trim()) {
+          showInputError(phoneInput, "Phone number is required");
+          isValid = false;
+        } else if (!/^\+?[\d\s-]{8,}$/.test(phoneInput.value.trim())) {
+          showInputError(phoneInput, "Please enter a valid phone number");
+          isValid = false;
+        }
+        
+        if (isValid) {
+          userData = {
+            email: emailInput.value.trim(),
+            name: nameInput.value.trim(),
+            phone: phoneInput.value.trim()
+          };
+        }
+      }
+      
+      if (isValid) {
+        console.log("Form validated successfully with values:", userData);
+        
+        // Update app state
+        AppState.setUserDetails(userData);
+        
+        // Clean up our custom step
+        stepDiv.remove();
+        
+        // Proceed to payment selection
+        BookingModal.goToPaymentSelection();
+      } else {
+        console.log("Form validation failed");
+      }
+    });
+  }
+  
+  // Helper function to show errors
+  function showInputError(input, message) {
+    if (!input) return;
+    
+    // Add red border
+    input.style.borderColor = '#ef4444';
+    
+    // Create error message
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'error-message';
+    errorDiv.style.color = '#ef4444';
+    errorDiv.style.fontSize = '0.75rem';
+    errorDiv.style.marginTop = '0.25rem';
+    errorDiv.textContent = message;
+    
+    // Add error after input
+    input.parentNode.appendChild(errorDiv);
+  }
+},
+  
+updateBookingSummary: () => {
+  if (!AppState.selectedTimeSlot || !AppState.currentResourceId) return;
+  
+  const resource = resources.find(r => r.id === AppState.currentResourceId);
+  if (!resource) return;
+  
+  // Update resource, date, time
+  const summaryResource = DOM.byId('summary-resource');
+  const summaryDate = DOM.byId('summary-date');
+  const summaryTime = DOM.byId('summary-time');
+  
+  if (summaryResource && summaryDate && summaryTime) {
+    summaryResource.textContent = resource.name;
+    
+    const dateObj = new Date(AppState.selectedTimeSlot.date);
+    const formattedDate = dateObj.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'long',
+      day: 'numeric'
+    });
+    summaryDate.textContent = formattedDate;
+    
+    summaryTime.textContent = `${Utils.formatTime(AppState.selectedTimeSlot.startTime)} - ${Utils.formatTime(AppState.selectedTimeSlot.endTime)} (${AppState.selectedTimeSlot.durationFormatted})`;
+  }
+  
+  // Calculate price with any applicable discount
+  const basePrice = AppState.selectedTimeSlot.price;
+  const userDiscount = AppState.userDiscount || 0;
+  const priceDetails = Utils.calculateBookingPrice(basePrice, userDiscount);
+  
+  // Store the calculated final price for later use
+  AppState.selectedTimeSlot.finalPrice = priceDetails.finalPrice;
+  
+  // Find the amount element(s)
+  const amountElements = document.querySelectorAll('.detail-item.summary-total');
+  
+  // Update each element found (usually just one)
+  amountElements.forEach(element => {
+    if (priceDetails.discountAmount > 0) {
+      // If there's a discount, show all three lines
+      element.innerHTML = `
+        <div class="with-discount">
+          <div class="price-row">
+            <span class="price-label">Amount:</span>
+            <span class="price-value">EGP ${priceDetails.originalPrice.toFixed(2)}</span>
+          </div>
+          <div class="discount-row">
+            <span class="discount-label">Discount (${priceDetails.discountPercentage}%):</span>
+            <span class="discount-value">-EGP ${priceDetails.discountAmount.toFixed(2)}</span>
+          </div>
+          <div class="net-price-row">
+            <span class="net-price-label">Net Amount:</span>
+            <span class="net-price-value">EGP ${priceDetails.finalPrice.toFixed(2)}</span>
+          </div>
+        </div>
+      `;
+    } else {
+      // No discount, just show the net amount line
+      element.innerHTML = `
+        <div>
+          <div class="net-price-row">
+            <span class="net-price-label">Amount:</span>
+            <span class="net-price-value">EGP ${priceDetails.finalPrice.toFixed(2)}</span>
+          </div>
+        </div>
+      `;
+    }
+  });
+  
+  // Update payment button text if it exists
+  const payButton = DOM.byId('process-card-payment');
+  if (payButton) {
+    payButton.textContent = `Pay EGP ${priceDetails.finalPrice.toFixed(2)}`;
+  }
+  
+  // Update Instapay amount if it exists
+  const instapayAmount = document.querySelector('.payment-details-grid .payment-value:first-child');
+  if (instapayAmount) {
+    instapayAmount.textContent = `EGP ${priceDetails.finalPrice.toFixed(2)}`;
+  }
+  
+  // Update credit card payment amount if it exists
+  const cardPaymentSummary = document.querySelector('.payment-detail .detail-value');
+  if (cardPaymentSummary) {
+    cardPaymentSummary.textContent = `EGP ${priceDetails.finalPrice.toFixed(2)}`;
+  }
+},
+  
+  generatePaymentMethods: () => {
+  const paymentMethodsContainer = DOM.byId('payment-methods');
+  if (!paymentMethodsContainer) return;
+  
+  paymentMethodsContainer.innerHTML = '';
+  
+  paymentMethods.forEach(method => {
+    const methodElement = document.createElement('div');
+    methodElement.className = 'payment-method';
+    methodElement.setAttribute('data-method', method.id);
+    methodElement.setAttribute('data-type', method.type);
+    
+    methodElement.innerHTML = `
+      <div class="payment-method-icon">
+        <img src="${method.icon}" alt="${method.name}">
+      </div>
+      <div class="payment-method-details">
+        <h4>${method.name}</h4>
+        <p>${method.description}</p>
+      </div>
+    `;
+    
+    methodElement.addEventListener('click', () => {
+      BookingModal.selectPaymentMethod(method.id);
+    });
+    
+    paymentMethodsContainer.appendChild(methodElement);
+  });
+},
+  
+  selectPaymentMethod: (methodId) => {
+    AppState.selectedPaymentMethod = methodId;
+    
+    const paymentMethods = document.querySelectorAll('.payment-method');
+    paymentMethods.forEach(method => {
+      DOM.removeClass(method, 'selected');
+    });
+    
+    const selectedMethod = document.querySelector(`.payment-method[data-method="${methodId}"]`);
+    if (selectedMethod) {
+      DOM.addClass(selectedMethod, 'selected');
+    }
+    
+    const proceedButton = DOM.byId('proceed-to-payment');
+    if (proceedButton) {
+      proceedButton.disabled = false;
+    }
+  },
+  
+  proceedToPaymentDetails: () => {
+    if (!AppState.selectedPaymentMethod) {
+    Toast.show('error', 'Please select a payment method');
+    return;
+  }
+  
+  // Get the selected method from the array
+  const selectedMethod = paymentMethods.find(method => method.id === AppState.selectedPaymentMethod);
+  if (!selectedMethod) return;
+  
+  BookingModal.hideAllSteps();
+  
+  if (selectedMethod.id === 'instapay') {
+    // Generate unique payment reference
+    const refNum = Utils.generateReferenceNumber();
+    
+    const paymentRefNum = DOM.byId('payment-ref-num');
+    if (paymentRefNum) {
+      paymentRefNum.textContent = refNum;
+    }
+
+      // Update payment details with current price
+  BookingModal.updateInstapayPaymentDetails();
+    
+    DOM.show(DOM.byId('booking-step-3'));
+  } else if (selectedMethod.id === 'credit-card') {
+    const bookingStep4 = DOM.byId('booking-step-4');
+    if (bookingStep4) {
+      // Update pay button text with amount
+      const payButton = DOM.byId('process-card-payment');
+      if (payButton) {
+        payButton.textContent = `Pay EGP ${AppState.selectedTimeSlot.price.toFixed(2)}`;
+      }
+      
+      DOM.show(bookingStep4);
+    }
+  } else if (selectedMethod.id === 'cash') {
+    // Handle cash payment - special flow
+    // No verification needed, just confirm booking with cash flag
+    BookingModal.processBookingWithCash();
+  } else {
+    // Other payment methods with external redirects
+    const bookingStep5 = DOM.byId('booking-step-5');
+    if (bookingStep5) {
+      const methodLogo = DOM.byId('payment-method-logo');
+      const methodTitle = DOM.byId('payment-method-title');
+      const methodInstructions = DOM.byId('payment-method-instructions');
+      
+      if (methodLogo && methodTitle && methodInstructions) {
+        methodLogo.src = selectedMethod.icon;
+        methodTitle.textContent = `Pay with ${selectedMethod.name}`;
+        methodInstructions.textContent = 
+          `You will be redirected to complete your payment. Please ensure you have the necessary app or credentials ready.`;
+      }
+      
+      DOM.show(bookingStep5);
+    }
+  }
+},
+
+processBookingWithCash: () => {
+  // Show loading screen
+  LoadingManager.showFullPageLoader('Processing', 'Confirming your cash booking...');
+  
+  // Simulate API call
+  setTimeout(() => {
+    if (!AppState.selectedTimeSlot || !AppState.currentResourceId) {
+      LoadingManager.hideFullPageLoader();
+      Toast.show('error', 'Invalid booking data');
+      return;
+    }
+    
+    const resource = resources.find(r => r.id === AppState.currentResourceId);
+    if (!resource) {
+      LoadingManager.hideFullPageLoader();
+      return;
+    }
+    
+    // Create booking with cash payment flag
+    const newBooking = {
+      id: Date.now(),
+      resourceId: AppState.currentResourceId,
+      resourceName: resource.name,
+      date: AppState.selectedTimeSlot.date,
+      startTime: AppState.selectedTimeSlot.startTime,
+      endTime: AppState.selectedTimeSlot.endTime,
+      status: 'CONFIRMED',
+      price: AppState.selectedTimeSlot.price,
+      paymentMethod: 'cash',
+      paymentStatus: 'pending' // Cash payments are pending until collected
+    };
+    
+    // Add to bookings
+    bookings.push(newBooking);
+    
+    // Add to booked slots
+    bookedSlots.push({
+      resourceId: AppState.currentResourceId,
+      date: AppState.selectedTimeSlot.date,
+      startTime: AppState.selectedTimeSlot.startTime,
+      endTime: AppState.selectedTimeSlot.endTime
+    });
+    
+    // Hide loading screen
+    LoadingManager.hideFullPageLoader();
+    
+    // Show success toast
+    Toast.show('success', 'Your cash booking is confirmed! Please pay when you arrive.');
+    
+    // Hide the modal
+    BookingModal.hide();
+  }, 1500);
+},
+  
+  handleFileUpload: (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    // Check file type
+    const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+    if (!validTypes.includes(file.type)) {
+      Toast.show('error', 'Please upload a valid image or PDF file');
+      return;
+    }
+    
+    // Check file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      Toast.show('error', 'File size should be less than 5MB');
+      return;
+    }
+    
+    // Store the file
+    AppState.uploadedFile = file;
+    
+    // Show preview
+    const uploadInstructions = DOM.byId('upload-instructions');
+    const previewContainer = DOM.byId('file-preview');
+    const previewImage = DOM.byId('preview-image');
+    
+    if (uploadInstructions && previewContainer && previewImage) {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          previewImage.src = e.target.result;
+          DOM.show(previewContainer);
+          DOM.hide(uploadInstructions);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        // PDF preview (just show an icon)
+        previewImage.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cGF0aCBmaWxsPSIjZTJlNWU3IiBkPSJNMTI4IDBoMjU2djUxMkgxMjh6Ii8+PHBhdGggZmlsbD0iI2Y1ZjZmNyIgZD0iTTM4NCA1MTJIMTkyVjBoMTkyeiIvPjxwYXRoIGZpbGw9IiNjZDIxMGIiIGQ9Ik00MTYgNTEySDk2VjI1NmgzMjB6Ii8+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTI1NiAzMzZjLTguODM3IDAtMTYtNy4xNjQtMTYtMTZoLTE2Yy0uMDIxIDguODM4IDMuMTYgMTcuNDQ2IDguOTE0IDI0LjE3MmE0OC4wOTYgNDguMDk2IDAgMCAxLTQuOTE0LTE1LjM2QzIxOS40MDYgMzY0LjIxMiAyNDEuNzk1IDM1MiAyNzIgMzUyYzkuMjIgMCAxNi0yLjc3OCAxNi04aDMyYy0uMDEgMTcuNDI4LTE0LjU4MiAzMS45NTYtMzIgMzEuOTctOS41ODYgMC0xNy44NzEtMy40MjYtMjQuNzMtOS4xMjhBMzEuODI0IDMxLjgyNCAwIDAgMCAyNTYgMzM2eiIvPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik0zMjggMzIwSDI3MnYtMzJoLTMydjMyaC01NnYzMmg1NnYzMmgzMnYtMzJoNTZ6Ii8+PC9zdmc+';
+        DOM.show(previewContainer);
+        DOM.hide(uploadInstructions);
+      }
+    }
+    
+    // Enable verify button
+    const verifyButton = DOM.byId('verify-payment');
+    if (verifyButton) {
+      verifyButton.disabled = false;
+    }
+  },
+  
+  verifyPayment: () => {
+  if (!AppState.uploadedFile) {
+    Toast.show('error', 'Please upload a payment screenshot');
+    return;
+  }
+  
+  // Show loading on button
+  LoadingManager.showButtonLoader('#verify-payment');
+  
+  // Show verification section with loading
+  const verificationStatus = DOM.byId('verification-status');
+  if (verificationStatus) {
+    DOM.show(verificationStatus);
+    verificationStatus.innerHTML = `
+      <div class="status-loading">
+        <div class="loading-spinner"></div>
+        <p>Verifying payment, please wait<span class="loading-dots"></span></p>
+      </div>
+    `;
+  }
+  
+  // Get payment reference
+  const paymentRef = document.getElementById('payment-ref-num').textContent;
+  
+  // Generate a temporary reference if needed
+  const reference = paymentRef || Utils.generateBookingReference();
+  
+  // Get the expected amount from the booking
+  const expectedAmount = AppState.selectedTimeSlot ? AppState.selectedTimeSlot.price : 0;
+  
+  // Create options for verification
+  const verificationOptions = {
+    maxAgeMins: 10,                 // 10 minutes by default
+    strictMetadataCheck: false,     // Don't be strict with metadata
+    allowMoreThanExpected: true     // Allow paying more than required
+  };
+  
+  // Verify the payment with options
+  API.verifyInstapayPayment(AppState.uploadedFile, reference, expectedAmount, verificationOptions)
+    .then(response => {
+      response = JSON.parse(response)
+      // Check if we have the right structure
+      if (!response.success || !response.result) {
+        throw new Error('Invalid verification response');
+      }
+      
+      const verificationResult = response.result.verification;
+      const ocrResult = response.result.ocrResult;
+      
+      // Store verification details for later use
+      AppState.verificationResult = {
+        fileUrl: response.fileUrl || '',
+        verified: verificationResult.isLegitimate && verificationResult.isRightAmount,
+        confidence: ocrResult.confidence || 'Low',
+        message: getVerificationMessage(verificationResult),
+        remainder: verificationResult.remainder,
+        amountStatus: verificationResult.amountStatus,
+        detailedResult: response.result, // Store the full result for reference
+        timestamp: new Date().toISOString()
+      };
+      
+      // Hide button loader
+      LoadingManager.hideButtonLoader('#verify-payment');
+      
+      // Update verification status UI based on result
+      updateVerificationUI(verificationResult, ocrResult);
+      
+      // For insufficient amount, show "Add Payment" button
+      if (verificationResult.amountStatus === 'less') {
+        setupPartialPaymentButton();
+      }
+    })
+    .catch(error => {
+      // Error handling
+      console.error('Error during verification:', error);
+      
+      // Hide button loader
+      LoadingManager.hideButtonLoader('#verify-payment');
+      
+      // Show error in verification status
+      verificationStatus.innerHTML = `
+        <div class="status-error">
+          <div class="status-error-header">
+            <i class="fas fa-times-circle status-error-icon"></i>
+            <h3 class="status-error-title">Verification Failed</h3>
+          </div>
+          <div class="status-error-details">
+            <p>${error.message || 'Could not complete verification. Please try again.'}</p>
+          </div>
+        </div>
+      `;
+    });
+},
+
+updateInstapayPaymentDetails:() =>{
+  if (!AppState.selectedTimeSlot) return;
+  
+  const finalPrice = AppState.selectedTimeSlot.finalPrice || AppState.selectedTimeSlot.price;
+  
+  // Find all payment labels
+  const amountLabels = document.querySelectorAll('.payment-label');
+  for (let i = 0; i < amountLabels.length; i++) {
+    if (amountLabels[i].textContent.trim() === 'Amount:') {
+      // Found the Amount label, now get the next element which should be the value
+      const amountValue = amountLabels[i].nextElementSibling;
+      if (amountValue && amountValue.classList.contains('payment-value')) {
+        amountValue.textContent = `EGP${finalPrice.toFixed(2)}`;
+        break;
+      }
+    }
+  }
+  
+  // Generate reference number if needed
+  const refNumElement = document.getElementById('payment-ref-num');
+  if (refNumElement && !refNumElement.textContent) {
+    const refNum = Utils.generateReferenceNumber();
+    refNumElement.textContent = refNum;
+  }
+},
+  
+  // processVerification: (paymentRef) => {
+  //   const verificationStatus = DOM.byId('verification-status');
+  //   if (!verificationStatus) return;
+    
+  //   const paymentId = paymentRef.split('-')[1];
+    
+  //   // Check if payment ID has been seen before
+  //   if (AppState.verifiedPayments.includes(paymentId)) {
+  //     verificationStatus.innerHTML = `
+  //       <div class="status-error">
+  //         <div class="status-error-header">
+  //           <i class="fas fa-times-circle status-error-icon"></i>
+  //           ="status-error-title">Verification Failed</h3>
+  //         </div>
+  //         <div class="status-error-details">
+  //           <p>This payment ID has already been used. Please make a new payment.</p>
+  //         </div>
+  //       </div>
+  //     `;
+  //     return;
+  //   }
+    
+  //   // Check timestamp (simulated)
+  //   const now = new Date();
+  //   const refDate = paymentId.substring(0, 6);
+  //   const year = '20' + refDate.substring(0, 2);
+  //   const month = refDate.substring(2, 4) - 1;
+  //   const day = refDate.substring(4, 6);
+  //   const paymentDate = new Date(year, month, day);
+    
+  //   const diffTime = Math.abs(now - paymentDate);
+  //   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+  //   if (diffDays > 1) {
+  //     verificationStatus.innerHTML = `
+  //       <div class="status-error">
+  //         <div class="status-error-header">
+  //           <i class="fas fa-times-circle status-error-icon"></i>
+  //           <h3 class="status-error-title">Verification Failed</h3>
+  //         </div>
+  //         <div class="status-error-details">
+  //           <p>This payment is older than 24 hours. Please make a new payment.</p>
+  //         </div>
+  //       </div>
+  //     `;
+  //     return;
+  //   }
+    
+  //   // Random success rate (90% success) - in a real app this would be actual OCR verification
+  //   const isSuccessful = Math.random() < 0.9;
+    
+  //   if (isSuccessful) {
+  //     // Add to verified payments
+  //     AppState.verifiedPayments.push(paymentId);
+      
+  //     verificationStatus.innerHTML = `
+  //       <div class="status-success">
+  //         <div class="status-success-header">
+  //           <i class="fas fa-check-circle status-success-icon"></i>
+  //           <h3 class="status-success-title">Payment Verified Successfully</h3>
+  //         </div>
+  //         <div class="status-success-details">
+  //           <p>Your payment has been verified and your booking is confirmed.</p>
+  //           <ul class="status-success-list">
+  //             <li>Payment Reference: ${paymentRef}</li>
+  //             <li>Amount: EGP ${AppState.selectedTimeSlot.price.toFixed(2)}</li>
+  //             <li>Transaction ID: INSTA-${Math.floor(100000 + Math.random() * 900000)}</li>
+  //           </ul>
+  //         </div>
+  //       </div>
+  //     `;
+      
+  //     // Process the booking
+  //     BookingModal.processBooking();
+      
+  //     // Hide normal action buttons
+  //     const actionButtons = DOM.byId('verify-payment').parentNode;
+  //     if (actionButtons) {
+  //       DOM.hide(actionButtons);
+  //     }
+      
+  //     // Show confirmation button
+  //     const confirmationAction = DOM.byId('confirmation-action');
+  //     if (confirmationAction) {
+  //       DOM.show(confirmationAction);
+  //     }
+  //   } else {
+  //     verificationStatus.innerHTML = `
+  //       <div class="status-error">
+  //         <div class="status-error-header">
+  //           <i class="fas fa-times-circle status-error-icon"></i>
+  //           <h3 class="status-error-title">Verification Failed</h3>
+  //         </div>
+  //         <div class="status-error-details">
+  //           <p>Could not verify the payment information in the image. Please ensure:</p>
+  //           <ul class="status-error-list">
+  //             <li>The image is clear and not cropped</li>
+  //             <li>The payment reference number is visible</li>
+  //             <li>The payment amount and date are visible</li>
+  //           </ul>
+  //           <p style="margin-top: 0.5rem;">Try uploading a clearer image or contact support.</p>
+  //         </div>
+  //       </div>
+  //     `;
+  //   }
+  // },
+  
+  processCardPayment: () => {
+  // Show loading on button
+  LoadingManager.showButtonLoader('#process-card-payment');
+  
+  // Simulate API call to process payment
+  setTimeout(() => {
+    // Hide button loader
+    LoadingManager.hideButtonLoader('#process-card-payment');
+    
+    // Show full page loader for booking creation
+    LoadingManager.showFullPageLoader('Processing Payment', 'Your payment is being processed...');
+    
+    setTimeout(() => {
+      // Process the booking
+      BookingModal.processBooking();
+      
+      // Hide full page loader
+      LoadingManager.hideFullPageLoader();
+      
+      // Show success toast
+      Toast.show('success', 'Payment processed successfully!');
+      
+      // Hide the modal
+      BookingModal.hide();
+    }, 1500);
+  }, 1500);
+},
+  
+  continueToExternalPayment: () => {
+  // Show loading on button
+  LoadingManager.showButtonLoader('#continue-to-external');
+  
+  // Show toast for redirecting
+  Toast.show('info', 'Redirecting to payment gateway...');
+  
+  // Simulate redirect and callback
+  setTimeout(() => {
+    // Show full page loader
+    LoadingManager.showFullPageLoader('Processing Payment', 'Completing your payment...');
+    
+    setTimeout(() => {
+      // Process the booking
+      BookingModal.processBooking();
+      
+      // Hide button loader and full page loader
+      LoadingManager.hideButtonLoader('#continue-to-external');
+      LoadingManager.hideFullPageLoader();
+      
+      // Show success toast
+      Toast.show('success', 'Payment completed successfully!');
+      
+      // Hide the modal
+      BookingModal.hide();
+    }, 1500);
+  }, 1500);
+},
+  
+processBooking: () => {
+  if (!AppState.selectedTimeSlot || !AppState.currentResourceId) {
+    Toast.show('error', 'Invalid booking data');
+    return;
+  }
+  
+  const resource = resources.find(r => r.id === AppState.currentResourceId);
+  if (!resource) return;
+  
+  // Get selected payment method
+  const selectedMethod = paymentMethods.find(method => method.id === AppState.selectedPaymentMethod);
+  
+  // Use the final price with discount if available, otherwise fall back to original price
+  const bookingPrice = AppState.selectedTimeSlot.finalPrice || AppState.selectedTimeSlot.price;
+  
+  // Create booking with payment information and user details
+  const newBooking = {
+    id: Date.now(),
+    resourceId: AppState.currentResourceId,
+    resourceName: resource.name,
+    date: AppState.selectedTimeSlot.date,
+    startTime: AppState.selectedTimeSlot.startTime,
+    endTime: AppState.selectedTimeSlot.endTime,
+    status: 'CONFIRMED',
+    price: bookingPrice, // Use the discounted price
+    originalPrice: AppState.selectedTimeSlot.price, // Store original price for reference
+    discountApplied: AppState.userDiscount || 0, // Store the discount percentage applied
+    paymentMethod: selectedMethod ? selectedMethod.id : 'unknown',
+    paymentStatus: 'completed',
+    
+    // Add user details
+    userDetails: {
+      email: AppState.userEmail,
+      name: AppState.userName,
+      phone: AppState.userPhone
+    },
+    
+    // Add information about who created the booking
+    createdBy: {
+      email: AppState.userEmail,
+      isAdmin: AppState.isAdmin
+    }
+  };
+  
+  // Add to bookings
+  bookings.push(newBooking);
+  
+  // Add to booked slots
+  bookedSlots.push({
+    resourceId: AppState.currentResourceId,
+    date: AppState.selectedTimeSlot.date,
+    startTime: AppState.selectedTimeSlot.startTime,
+    endTime: AppState.selectedTimeSlot.endTime
+  });
+  
+  console.log('Booking created:', newBooking);
+  
+  // This would be where we add the API call in the future
+  // For now, just log that we would make an API call
+  console.log('Would make API call to create booking in backend');
+}
+
+
+}
+
+// Optional: Admin filter component for bookings view
+// Only add this if you want to enhance the admin experience
+
+function addAdminFilters() {
+  // Only proceed if user is admin
+  if (!AppState.isAdmin) return;
+  
+  // Look for the bookings header
+  const bookingsHeader = document.querySelector('.bookings-header');
+  if (!bookingsHeader) return;
+  
+  // Check if filters already exist
+  if (document.querySelector('.admin-filters')) return;
+  
+  // Create filters container
+  const filtersContainer = document.createElement('div');
+  filtersContainer.className = 'admin-filters';
+  
+  // Create user filter dropdown
+  const userSelect = document.createElement('select');
+  userSelect.id = 'admin-user-filter';
+  
+  // Add default option
+  let options = '<option value="">All Users</option>';
+  
+  // Get unique user emails from bookings
+  const userEmails = [...new Set(bookings
+    .filter(booking => booking.userDetails && booking.userDetails.email)
+    .map(booking => booking.userDetails.email))];
+  
+  // Add option for each user
+  userEmails.forEach(email => {
+    // Find a booking with this user to get their name
+    const booking = bookings.find(b => b.userDetails && b.userDetails.email === email);
+    const name = booking && booking.userDetails.name ? booking.userDetails.name : email;
+    
+    options += `<option value="${email}">${name}</option>`;
+  });
+  
+  userSelect.innerHTML = options;
+  
+  // Create search input
+  const searchContainer = document.createElement('div');
+  searchContainer.className = 'search-input';
+  
+  searchContainer.innerHTML = `
+    <i class="fas fa-search"></i>
+    <input type="text" id="admin-search-filter" placeholder="Search bookings...">
+  `;
+  
+  // Add filters to container
+  filtersContainer.appendChild(userSelect);
+  filtersContainer.appendChild(searchContainer);
+  
+  // Add container after header
+  bookingsHeader.after(filtersContainer);
+  
+  // Add event listeners
+  userSelect.addEventListener('change', applyAdminFilters);
+  searchContainer.querySelector('input').addEventListener('input', applyAdminFilters);
+}
+
+function applyAdminFilters() {
+  // Only run if admin
+  if (!AppState.isAdmin) return;
+  
+  // Get filter values
+  const userFilter = document.getElementById('admin-user-filter').value;
+  const searchFilter = document.getElementById('admin-search-filter').value.toLowerCase();
+  
+  // Re-render bookings with these filters
+  renderAdminFilteredBookings(userFilter, searchFilter);
+}
+
+function renderAdminFilteredBookings(userFilter, searchFilter) {
+  // This is a placeholder function that would work similarly to renderBookings
+  // but with additional filtering based on userFilter and searchFilter
+  
+  // For now, just call the regular render method
+  // In a full implementation, you would modify this to apply the additional filters
+  UI.renderBookings();
+  
+  console.log('Admin filters applied:', { userFilter, searchFilter });
+}
+
+// Call this function after the page is loaded to add admin filters if needed
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(addAdminFilters, 1000);
+});
+
+///////////////////////////// FORMULATE BOOKING OBJ START
+
+  /**
+   * Helper function to add "Add Payment" button for partial payments
+   */
+  function setupPartialPaymentButton() {
+    // Remove any existing button first
+    const existingBtn = document.getElementById('add-partial-payment');
+    if (existingBtn) {
+      existingBtn.remove();
+    }
+    
+    const verificationStatus = DOM.byId('verification-status');
+    if (!verificationStatus) return;
+    
+    const warningSection = verificationStatus.querySelector('.status-warning');
+    if (!warningSection) return;
+    
+    // Create button
+    const addPaymentBtn = document.createElement('button');
+    addPaymentBtn.id = 'add-partial-payment';
+    addPaymentBtn.className = 'btn btn-primary';
+    addPaymentBtn.textContent = 'Add This Payment';
+    
+    // Create container
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'button-container';
+    buttonContainer.style.marginTop = '12px';
+    buttonContainer.appendChild(addPaymentBtn);
+    
+    // Add to warning section
+    warningSection.appendChild(buttonContainer);
+    
+    // Add event listener
+    addPaymentBtn.addEventListener('click', BookingModal.addPartialPayment);
+  }
+
+/**
+ * Formulate booking request based on user scenario
+ * @param {Object} currentState - The current AppState
+ * @returns {Object} Formatted booking request object
+ */
+function formulateBookingRequest(currentState) {
+  // Get necessary data from current state
+  const {
+    currentResourceId,
+    selectedTimeSlot,
+    selectedPaymentMethod,
+    uploadedFile,
+    verificationResult,
+    userEmail,
+    userName,
+    userPhone,
+    userDiscount,
+    isAdmin
+  } = currentState;
+  
+  // Get resource
+  const resource = resources.find(r => r.id === currentResourceId);
+  if (!resource) {
+    throw new Error('Resource not found');
+  }
+  
+  // Get payment method details
+  const paymentMethodObj = paymentMethods.find(m => m.id === selectedPaymentMethod);
+  if (!paymentMethodObj) {
+    throw new Error('Payment method not found');
+  }
+  
+  // Calculate price with discount if applicable
+  const bookingPrice = selectedTimeSlot.finalPrice || selectedTimeSlot.price;
+  
+  // Generate a booking reference
+  const reference = API.generateBookingReference();
+  
+  // Base booking object
+  const baseBooking = {
+    reference: reference,
+    resourceId: currentResourceId,
+    resourceName: resource.name,
+    resourceLabel: resource.label,
+    date: selectedTimeSlot.date,
+    startTime: selectedTimeSlot.startTime,
+    endTime: selectedTimeSlot.endTime,
+    duration: selectedTimeSlot.duration || 
+              (Utils.convertTimeToMinutes(selectedTimeSlot.endTime) - 
+               Utils.convertTimeToMinutes(selectedTimeSlot.startTime)) / 60,
+    status: 'CONFIRMED',
+    price: bookingPrice,
+    originalPrice: selectedTimeSlot.price,
+    discountApplied: userDiscount || 0,
+    paymentMethod: paymentMethodObj.id,
+    paymentStatus: 'completed',
+    createdAt: new Date().toISOString()
+  };
+  
+  // ---- SCENARIO 1: Admin booking for existing user ----
+  if (isAdmin && userEmail && !currentState.isNewUser) {
+    return {
+      ...baseBooking,
+      userDetails: {
+        email: userEmail,
+        name: userName,
+        phone: userPhone,
+        discount: userDiscount || 0
+      },
+      createdBy: {
+        email: currentState.adminEmail || userEmail, // Fallback to userEmail if adminEmail not set
+        isAdmin: true
+      },
+      bookingType: 'ADMIN_FOR_EXISTING'
+    };
+  }
+  
+  // ---- SCENARIO 2: Admin creating booking for new user ----
+  else if (isAdmin && currentState.isNewUser) {
+    return {
+      ...baseBooking,
+      userDetails: {
+        email: userEmail,
+        name: userName,
+        phone: userPhone,
+        discount: userDiscount || 0,
+        isNewUser: true
+      },
+      createdBy: {
+        email: currentState.adminEmail || userEmail,
+        isAdmin: true
+      },
+      bookingType: 'ADMIN_FOR_NEW'
+    };
+  }
+  
+  // ---- SCENARIO 3: Logged in user (email in URL) ----
+  else if (userEmail && !isAdmin && !currentState.isNewUser) {
+    return {
+      ...baseBooking,
+      userDetails: {
+        email: userEmail,
+        name: userName,
+        phone: userPhone
+      },
+      createdBy: {
+        email: userEmail,
+        isAdmin: false
+      },
+      bookingType: 'EXISTING_USER'
+    };
+  }
+  
+  // ---- SCENARIO 4: Public booking (no user in URL) ----
+  else {
+    return {
+      ...baseBooking,
+      userDetails: {
+        email: userEmail,
+        name: userName,
+        phone: userPhone,
+        isNewUser: true
+      },
+      createdBy: {
+        email: userEmail,
+        isAdmin: false
+      },
+      bookingType: 'PUBLIC_NEW_USER'
+    };
+  }
+}
+
+/**
+ * Add payment details to booking request for Instapay
+ * @param {Object} bookingRequest - The base booking request
+ * @param {Object} verificationResult - Verification result if available
+ * @returns {Object} Booking request with payment details
+ */
+function addPaymentDetailsToRequest(bookingRequest, verificationResult) {
+  // Only add payment details for Instapay
+  if (bookingRequest.paymentMethod !== 'instapay') {
+    return bookingRequest;
+  }
+  
+  // If we have verification results
+  if (verificationResult) {
+    return {
+      ...bookingRequest,
+      paymentDetails: {
+        verificationImage: verificationResult.fileUrl,
+        verificationStatus: verificationResult.verified ? 'VERIFIED' : 'UNVERIFIED',
+        verificationMessage: verificationResult.message,
+        verificationConfidence: verificationResult.confidence,
+        verificationTimestamp: verificationResult.timestamp
+      },
+      paymentStatus: verificationResult.verified ? 'completed' : 'pending_verification'
+    };
+  }
+  
+  // If no verification was done but it's Instapay
+  return {
+    ...bookingRequest,
+    paymentDetails: {
+      verificationStatus: 'PENDING',
+      verificationMessage: 'Verification pending'
+    },
+    paymentStatus: 'pending_verification'
+  };
+}
+
+
+///////////////////////////// FORMULATE BOOKING OBJ END
+
+
+///////////////////////////// INSTAPAY VERFICATION HELPERS
+
+/**
+ * Enhanced function to get user-friendly verification messages including duplicate reference number detection
+ * Using EGP currency symbol consistently
+ * @param {Object} verificationResult - The verification result from the backend
+ * @returns {string} A user-friendly message explaining the verification result
+ */
+function getVerificationMessage(verificationResult) {
+  if (!verificationResult) {
+    return 'Could not verify the payment. Please try again.';
+  }
+  
+  // Handle case where verification failed due to legitimacy
+  if (!verificationResult.isLegitimate) {
+    // Check if we have specific reasons provided
+    if (verificationResult.reasons && verificationResult.reasons.length > 0) {
+      // Get all reasons to check for specific issues
+      const reasons = verificationResult.reasons;
+      
+      // Check for duplicate transaction reference issue
+      const hasDuplicateReferenceIssue = reasons.some(reason => 
+        reason.toLowerCase().includes('duplicate') || 
+        reason.toLowerCase().includes('already used') || 
+        reason.toLowerCase().includes('previously verified')
+      );
+      
+      if (hasDuplicateReferenceIssue) {
+        return 'This payment has already been used for another booking. Please make a new payment or use a different payment screenshot.';
+      }
+      
+      // Check for missing timestamp issue
+      const hasTimestampIssue = reasons.some(reason => 
+        reason.toLowerCase().includes('timestamp') || 
+        reason.toLowerCase().includes('date') || 
+        reason.toLowerCase().includes('time')
+      );
+      
+      // Check for missing payment ID issue
+      const hasPaymentIdIssue = reasons.some(reason => 
+        reason.toLowerCase().includes('id') || 
+        reason.toLowerCase().includes('reference') || 
+        reason.toLowerCase().includes('transaction')
+      );
+      
+      // Both timestamp and payment ID issues
+      if (hasTimestampIssue && hasPaymentIdIssue) {
+        return 'The screenshot is missing both a timestamp and payment ID. Please ensure your screenshot shows the complete payment receipt with date/time and transaction reference number.';
+      }
+      
+      // Only timestamp issue
+      if (hasTimestampIssue) {
+        return 'The screenshot is missing a valid timestamp. Please ensure your screenshot shows the date and time of the payment.';
+      }
+      
+      // Only payment ID issue
+      if (hasPaymentIdIssue) {
+        return 'The screenshot is missing a payment ID or reference number. Please ensure your screenshot shows the complete transaction reference.';
+      }
+      
+      // Check for other specific known reasons
+      if (reasons.some(r => r.includes('Transaction is too old'))) {
+        return 'The payment screenshot is too old. Please make a new payment or upload a recent screenshot.';
+      }
+      
+      if (reasons.some(r => r.includes('Missing metadata'))) {
+        return 'The payment screenshot is missing some key information. Please ensure all payment details are visible.';
+      }
+      
+      if (reasons.some(r => r.includes('No amount found'))) {
+        return 'Could not find the payment amount in the screenshot. Please ensure the amount is clearly visible.';
+      }
+      
+      // Return the primary reason as-is if we don't have a specific handler
+      return reasons[0];
+    }
+    
+    // Default message if no specific reasons are provided
+    return 'The payment screenshot could not be verified. Please ensure all payment details are clearly visible.';
+  }
+  
+  // Handle cases where the payment is legitimate but amount doesn't match
+  if (verificationResult.amountStatus === 'less') {
+    const remainder = Math.abs(verificationResult.remainder || 0).toFixed(2);
+    return `We detected a partial payment. You need to pay an additional EGP ${remainder} to complete the booking.`;
+  }
+  
+  if (verificationResult.amountStatus === 'more') {
+    const extra = Math.abs(verificationResult.remainder || 0).toFixed(2);
+    return `You paid EGP ${extra} more than the required amount. The booking will be confirmed.`;
+  }
+  
+  // Handle successful verification
+  if (verificationResult.isRightAmount) {
+    return 'Payment verified successfully! Your booking is confirmed.';
+  }
+  
+  // Fallback message for any other cases
+  return 'There was an issue with the payment verification. Please try again or contact support.';
+}
+
+/**
+ * Enhanced function to update the verification UI with specific warnings for missing information
+ * or duplicate transaction references
+ * Using EGP currency symbol consistently
+ * @param {Object} verificationResult - The verification result from the backend
+ * @param {Object} ocrResult - OCR result data if available
+ */
+function updateVerificationUI(verificationResult, ocrResult) {
+  const verificationStatus = DOM.byId('verification-status');
+  if (!verificationStatus) return;
+  
+  // Default values if some properties are missing
+  const isLegitimate = verificationResult?.isLegitimate || false;
+  const isRightAmount = verificationResult?.isRightAmount || false;
+  const amountStatus = verificationResult?.amountStatus || 'unknown';
+  const remainder = verificationResult?.remainder || 0;
+  const confidence = ocrResult?.confidence || 'Medium';
+  
+  // Check if there are specific reasons for the verification result
+  const reasons = verificationResult?.reasons || [];
+  const warnings = verificationResult?.warnings || [];
+  
+  // Generate a verification ID for successful verifications
+  const verificationId = `VRF-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`.toUpperCase();
+  
+  if (isLegitimate && isRightAmount) {
+    // Payment is fully verified
+    verificationStatus.innerHTML = `
+      <div class="status-success">
+        <div class="status-success-header">
+          <i class="fas fa-check-circle status-success-icon"></i>
+          <h3 class="status-success-title">Payment Verified Successfully</h3>
+        </div>
+        <div class="status-success-details">
+          <p>Your payment has been verified and your booking is confirmed.</p>
+          <ul class="status-success-list">
+            <li>Amount: EGP ${AppState.selectedTimeSlot.finalPrice.toFixed(2)}</li>
+            <li>Confidence: ${confidence}</li>
+            <li>Verification ID: ${verificationId}</li>
+          </ul>
+        </div>
+      </div>
+    `;
+    
+    // Show confirmation button
+    const confirmationAction = DOM.byId('confirmation-action');
+    if (confirmationAction) {
+      DOM.show(confirmationAction);
+    }
+    
+    // Hide action buttons
+    const actionButtons = DOM.byId('verify-payment')?.parentNode;
+    if (actionButtons) {
+      DOM.hide(actionButtons);
+    }
+    
+    // Process the booking
+    BookingModal.processBooking();
+  } 
+  else if (isLegitimate && amountStatus === 'less') {
+    // Payment is legitimate but amount is less than expected
+    const paidAmount = AppState.selectedTimeSlot.finalPrice - Math.abs(remainder);
+    
+    verificationStatus.innerHTML = `
+      <div class="status-warning">
+        <div class="status-warning-header">
+          <i class="fas fa-exclamation-triangle status-warning-icon"></i>
+          <h3 class="status-warning-title">Partial Payment Detected</h3>
+        </div>
+        <div class="status-warning-details">
+          <p>We've detected a payment, but the amount is less than required:</p>
+          <ul class="status-warning-list">
+            <li>Paid: EGP ${paidAmount.toFixed(2)}</li>
+            <li>Remaining: EGP ${Math.abs(remainder).toFixed(2)}</li>
+            ${warnings.length > 0 ? `<li class="warning-note">Note: ${warnings[0]}</li>` : ''}
+          </ul>
+          <p>You can complete the payment or accept the current partial payment.</p>
+        </div>
+      </div>
+    `;
+  }
+  else if (isLegitimate && amountStatus === 'more') {
+    // Payment is legitimate but amount is more than expected
+    const paidAmount = AppState.selectedTimeSlot.finalPrice + Math.abs(remainder);
+    
+    verificationStatus.innerHTML = `
+      <div class="status-info">
+        <div class="status-info-header">
+          <i class="fas fa-info-circle status-info-icon"></i>
+          <h3 class="status-info-title">Overpayment Detected</h3>
+        </div>
+        <div class="status-info-details">
+          <p>We've detected a payment with an amount higher than required:</p>
+          <ul class="status-info-list">
+            <li>Required: EGP ${AppState.selectedTimeSlot.finalPrice.toFixed(2)}</li>
+            <li>Paid: EGP ${paidAmount.toFixed(2)}</li>
+            <li>Difference: EGP ${Math.abs(remainder).toFixed(2)}</li>
+          </ul>
+          <p>The booking will be confirmed with the extra amount noted.</p>
+        </div>
+      </div>
+    `;
+    
+    // Show confirmation button
+    const confirmationAction = DOM.byId('confirmation-action');
+    if (confirmationAction) {
+      DOM.show(confirmationAction);
+    }
+    
+    // Hide action buttons
+    const actionButtons = DOM.byId('verify-payment')?.parentNode;
+    if (actionButtons) {
+      DOM.hide(actionButtons);
+    }
+    
+    // Process the booking
+    BookingModal.processBooking();
+  }
+  else {
+    // Payment verification failed
+    // Check for specific issues
+    const hasDuplicateReferenceIssue = reasons.some(reason => 
+      reason.toLowerCase().includes('duplicate') || 
+      reason.toLowerCase().includes('already used') || 
+      reason.toLowerCase().includes('previously verified')
+    );
+    
+    const hasTimestampIssue = reasons.some(reason => 
+      reason.toLowerCase().includes('timestamp') || 
+      reason.toLowerCase().includes('date') || 
+      reason.toLowerCase().includes('time')
+    );
+    
+    const hasPaymentIdIssue = reasons.some(reason => 
+      reason.toLowerCase().includes('id') || 
+      reason.toLowerCase().includes('reference') || 
+      reason.toLowerCase().includes('transaction')
+    );
+    
+    // Create custom error list based on issues
+    let reasonsList = '';
+    
+    if (hasDuplicateReferenceIssue) {
+      // Show duplicate reference error with special styling
+      reasonsList = `
+        <ul class="status-error-list">
+          <li class="duplicate-error">This transaction has already been used for another booking</li>
+          <li>Each payment can only be used once in our system</li>
+          <li>Please make a new payment for this booking</li>
+          <li>Or contact support if you believe this is an error</li>
+        </ul>
+      `;
+    }
+    else if (hasTimestampIssue || hasPaymentIdIssue) {
+      reasonsList = `
+        <ul class="status-error-list">
+          ${hasTimestampIssue ? `<li class="critical-error">No timestamp or date found in the screenshot</li>` : ''}
+          ${hasPaymentIdIssue ? `<li class="critical-error">No payment ID or reference number found</li>` : ''}
+          <li>Please ensure your screenshot includes:</li>
+          <li>- The complete payment receipt</li>
+          <li>- Date and time of the transaction</li>
+          <li>- Transaction reference number</li>
+          <li>- Payment amount</li>
+        </ul>
+      `;
+    } 
+    else if (reasons.length > 0) {
+      // Show all provided reasons
+      reasonsList = `
+        <ul class="status-error-list reasons-list">
+          ${reasons.map(reason => `<li>${reason}</li>`).join('')}
+        </ul>
+      `;
+    } 
+    else {
+      // Generic guidance
+      reasonsList = `
+        <ul class="status-error-list">
+          <li>The image is clear and not cropped</li>
+          <li>The payment reference number is visible</li>
+          <li>The payment amount and date are visible</li>
+        </ul>
+      `;
+    }
+    
+    // Extra help for different issues
+    let extraHelp = '';
+    
+    if (hasDuplicateReferenceIssue) {
+      extraHelp = `
+        <div class="error-example">
+          <p class="error-example-title">What to do:</p>
+          <ul class="error-example-list">
+            <li>1. Make a new payment for this booking</li>
+            <li>2. Upload the screenshot of the new payment</li>
+            <li>3. Ensure you don't reuse payment screenshots</li>
+          </ul>
+        </div>
+      `;
+    }
+    else if (hasTimestampIssue || hasPaymentIdIssue) {
+      extraHelp = `
+        <div class="error-example">
+          <p class="error-example-title">Example of a complete receipt:</p>
+          <div class="error-example-image">
+            <i class="fas fa-receipt"></i>
+          </div>
+          <ul class="error-example-list">
+            <li>✓ Amount clearly visible</li>
+            <li>✓ Date and time of transaction</li>
+            <li>✓ Transaction reference or ID</li>
+            <li>✓ Payment method details</li>
+          </ul>
+        </div>
+      `;
+    }
+    
+    verificationStatus.innerHTML = `
+      <div class="status-error">
+        <div class="status-error-header">
+          <i class="fas fa-times-circle status-error-icon"></i>
+          <h3 class="status-error-title">Verification Failed</h3>
+        </div>
+        <div class="status-error-details">
+          <p>${getVerificationMessage(verificationResult)}</p>
+          ${reasonsList}
+          ${extraHelp}
+          ${!hasDuplicateReferenceIssue ? `<p style="margin-top: 0.5rem;">Try uploading a clearer image that shows all required information.</p>` : ''}
+        </div>
+      </div>
+    `;
+  }
+}
+
+/////////////////////// 🤔🤔🤔🤔
+
+// Super direct solution to update Instapay payment details
+// Now using EGP consistently
+BookingModal.updateInstapayPaymentDetails = function() {
+  if (!AppState.selectedTimeSlot) return;
+  
+  // Get the final price (with any applicable discount)
+  const finalPrice = AppState.selectedTimeSlot.finalPrice || AppState.selectedTimeSlot.price;
+  
+  // First try with the most direct approach possible - find "Amount:" label and select next element
+  const amountLabels = document.querySelectorAll('.payment-label');
+  for (let i = 0; i < amountLabels.length; i++) {
+    if (amountLabels[i].textContent.trim() === 'Amount:') {
+      // Found the Amount label, now get the next element which should be the value
+      const amountValue = amountLabels[i].nextElementSibling;
+      if (amountValue && amountValue.classList.contains('payment-value')) {
+        amountValue.textContent = `EGP ${finalPrice.toFixed(2)}`;
+        console.log("Updated amount via label-next-sibling approach");
+        break;
+      }
+    }
+  }
+  
+  // Generate a unique reference number if not already set
+  const refNumElement = document.getElementById('payment-ref-num');
+  if (refNumElement && !refNumElement.textContent) {
+    const refNum = Utils.generateReferenceNumber();
+    refNumElement.textContent = refNum;
+  }
+};
+
+// Alternative direct update function using direct DOM targeting
+// Now using EGP consistently
+function updateInstapayAmount() {
+  // This directly targets and updates the amount field
+  // Add this to your code where needed
+  
+  if (!AppState.selectedTimeSlot) return;
+  
+  // Get the final price (with any applicable discount)
+  const finalPrice = AppState.selectedTimeSlot.finalPrice || AppState.selectedTimeSlot.price;
+  
+  // Direct document.querySelector approach - add a data attribute to the HTML if possible
+  document.querySelectorAll('.payment-details-grid').forEach(grid => {
+    const labels = grid.querySelectorAll('.payment-label');
+    const values = grid.querySelectorAll('.payment-value');
+    
+    for (let i = 0; i < labels.length; i++) {
+      if (labels[i].textContent.trim() === 'Amount:') {
+        if (values[i]) {
+          values[i].textContent = `EGP ${finalPrice.toFixed(2)}`;
+          console.log("Updated amount via grid-index matching");
+          return;
+        }
+      }
+    }
+  });
+}
+
+// For direct DOM manipulation - can be used in the console for testing
+// Now using EGP consistently
+function directlyUpdateAmount(amount) {
+  document.querySelectorAll('.payment-details-grid .payment-value')[0].textContent = `EGP ${amount.toFixed(2)}`;
+}
+
+
+// ===== CANCEL MODAL =====
+const CancelModal = {
+  open: (bookingId) => {
+    const cancelYes = DOM.byId('cancel-yes');
+    if (cancelYes) {
+      cancelYes.setAttribute('data-booking-id', bookingId);
+      
+      // Add one-time event listener
+      cancelYes.addEventListener('click', function() {
+        CancelModal.cancelBooking(this.getAttribute('data-booking-id'));
+      }, { once: true });
+    }
+    
+    const cancelModal = DOM.byId('cancel-modal');
+    if (cancelModal) {
+      DOM.addClass(cancelModal, 'active');
+      document.body.style.overflow = 'hidden';
+    }
+  },
+  
+  hide: () => {
+    const cancelModal = DOM.byId('cancel-modal');
+    if (cancelModal) {
+      DOM.removeClass(cancelModal, 'active');
+      document.body.style.overflow = '';
+    }
+  },
+  
+  cancelBooking: (bookingId) => {
+    const bookingIndex = bookings.findIndex(b => b.id === parseInt(bookingId));
+    
+    if (bookingIndex !== -1) {
+      // Update booking status
+      bookings[bookingIndex].status = 'CANCELED';
+      
+      // Remove from booked slots
+      const booking = bookings[bookingIndex];
+      const bookedSlotIndex = bookedSlots.findIndex(slot => 
+        slot.resourceId === booking.resourceId &&
+        slot.date === booking.date &&
+        slot.startTime === booking.startTime &&
+        slot.endTime === booking.endTime
+      );
+      
+      if (bookedSlotIndex !== -1) {
+        bookedSlots.splice(bookedSlotIndex, 1);
+      }
+      
+      // Hide cancel modal
+      CancelModal.hide();
+      
+      // Show success toast
+      Toast.show('success', 'Booking canceled successfully');
+      
+      // Re-render bookings
+      UI.renderBookings();
+    }
+  }
+};
+
+// ===== MODIFY THE API MODULE =====
+// Using Google Apps Script's google.script.run for server communication
+
+const API = {
+  /**
+   * Core request method that handles all API calls to Google Apps Script
+   * @param {string} functionName - Server-side function to call
+   * @param {object} data - Optional data to send to the server
+   * @param {object} options - Optional configuration
+   * @returns {Promise} Promise that resolves with the response
+   */
+  request: function(functionName, data = {}, options = {}) {
+    const {
+      showLoader = true,
+      loaderMessage = 'Processing Request',
+      loaderTitle = 'Please Wait',
+      hideToastOnSuccess = false,
+      successMessage = 'Operation completed successfully',
+      errorMessage = 'Operation failed. Please try again.'
+    } = options;
+    
+    return new Promise((resolve, reject) => {
+      // Show loader if requested
+      if (showLoader) {
+        LoadingManager.showFullPageLoader(loaderTitle, loaderMessage);
+      }
+      
+      // Call the Google Apps Script function
+      google.script.run
+        .withSuccessHandler(function(response) {
+          // Hide loader if shown
+          if (showLoader) {
+            LoadingManager.hideFullPageLoader();
+          }
+          
+          // Show success toast if needed
+          if (!hideToastOnSuccess) {
+            Toast.show('success', successMessage);
+          }
+          
+          // Resolve with response
+          resolve(response);
+        })
+        .withFailureHandler(function(error) {
+          console.error(`API Error (${functionName}):`, error);
+          
+          // Hide loader if shown
+          if (showLoader) {
+            LoadingManager.hideFullPageLoader();
+          }
+          
+          // Show error toast
+          Toast.show('error', errorMessage);
+          
+          // Reject with error
+          reject(error);
+        })
+        [functionName](data); // Call the specified function
+    });
+  },
+  
+  /**
+   * Fetch resources from the server
+   * @returns {Promise} Promise that resolves with processed resources
+   */
+  fetchResources: function() {
+    return new Promise((resolve, reject) => {
+      this.request('fetchData', {}, {
+        loaderTitle: 'Loading Resources',
+        loaderMessage: 'Fetching available resources...',
+        hideToastOnSuccess: true,
+        errorMessage: 'Failed to load resources. Please try again.',
+        showLoader: false // Don't show full page loader because we're using skeleton loaders
+      })
+        .then(response => {
+          try {
+            // Parse the response if it's a string
+            const data = typeof response === 'string' ? JSON.parse(response) : response;
+            console.log('Resources data loaded:', data);
+            
+            // Handle different response formats
+            if (Array.isArray(data)) {
+              resolve(data);
+            } else if (data && data.krooResourcesRooms) {
+              // Process resources data if it's in the nested format
+              const processedResources = data.krooResourcesRooms.map(resource => ({
+                id: resource.id,
+                name: resource.name,
+                image: resource.image || '/api/placeholder/400/260',
+                capacity: resource.capacity || 0,
+                status: resource.status || 'available',
+                location: resource.location || 'Not specified',
+                pricePerHour: resource.pricePerHour || 100
+              }));
+
+              resources = processedResources;
+              console.log(resources)
+              // Resolve with processed data
+              resolve(processedResources);
+            } else {
+              throw new Error('Invalid data format');
+            }
+          } catch (error) {
+            console.error('Error processing resources data:', error);
+            
+            // Fall back to mock data in development
+            if (window.resources) {
+              console.warn('Falling back to mock resources data');
+              resolve(window.resources);
+            } else {
+              reject(error);
+            }
+          }
+        })
+        .catch(error => {
+          // Fall back to mock data in development
+          if (window.resources) {
+            console.warn('Falling back to mock resources data due to API error');
+            resolve(window.resources);
+          } else {
+            reject(error);
+          }
+        });
+    });
+  },
+  
+  /**
+   * Fetch booked slots for a resource
+   * @param {number} resourceId - Resource ID
+   * @param {string} date - Date in YYYY-MM-DD format
+   * @returns {Promise} Promise that resolves with booked slots
+   */
+  fetchBookedSlots: function(resourceId, date) {
+    return new Promise((resolve, reject) => {
+      this.request('fetchBookedSlots', { resourceId, date }, {
+        showLoader: false,
+        hideToastOnSuccess: true,
+        errorMessage: 'Failed to load booking data'
+      })
+        .then(response => {
+          // Parse the response if it's a string
+          const data = typeof response === 'string' ? JSON.parse(response) : response;
+          resolve(data);
+        })
+        .catch(error => {
+          console.error('Error fetching booked slots:', error);
+          
+          // Fall back to mock data in development
+          if (window.bookedSlots) {
+            console.warn('Falling back to mock booked slots data');
+            const fallbackSlots = window.bookedSlots.filter(slot => 
+              slot.resourceId === resourceId && 
+              slot.date === date
+            );
+            resolve(fallbackSlots);
+          } else {
+            reject(error);
+          }
+        });
+    });
+  },
+  
+  /**
+   * Create a new booking
+   * @param {object} bookingData - Booking data
+   * @returns {Promise} Promise that resolves with created booking
+   */
+  createBooking: function(bookingData) {
+    return this.request('createBooking', bookingData, {
+      loaderTitle: 'Creating Booking',
+      loaderMessage: 'Please wait while we confirm your booking...',
+      successMessage: 'Booking created successfully!'
+    });
+  },
+  
+  /**
+   * Add booking to buffer (first stage - wait for response)
+   * @param {object} bookingData - Complete booking data with reference
+   * @returns {Promise} Promise resolving to booking with ID and reference
+   */
+
+  addToBuffer: function(bookingData) {
+    // Ensure booking has a reference number
+    if (!bookingData.reference) {
+      bookingData.reference = Utils.generateBookingReference();
+    }
+    
+    // Add timestamp if not present
+    if (!bookingData.bufferTimestamp) {
+      bookingData.bufferTimestamp = Date.now();
+    }
+    
+    return this.request('addBookingToBuffer', bookingData, {
+      loaderTitle: 'Processing Booking',
+      loaderMessage: 'Please wait while we confirm your reservation...',
+      hideToastOnSuccess: true,
+      errorMessage: 'Could not process your booking. Please try again.'
+    });
+  },
+
+  /**
+ * Add booking to database (second stage - don't wait for response)
+ * @param {object} bookingData - Booking data from buffer
+ */
+  addToDatabase: function(bookingData) {
+    // Add DB timestamp
+    const dbBookingData = {
+      ...bookingData,
+      dbTimestamp: Date.now()
+    };
+    
+    // Don't wait for response, don't show loader
+    this.request('addBookingToDatabase', dbBookingData, {
+      showLoader: false,
+      hideToastOnSuccess: true
+    })
+      .then(response => {
+        console.log('Booking added to database:', response);
+      })
+      .catch(error => {
+        console.error('Error adding booking to database:', error);
+        // Optionally implement retry logic here
+      });
+  },
+  
+
+  verifyInstapayPayment:function(file, bookingReference, expectedAmount, verificationOptions) {
+    // Show loading on button (if calling from modal)
+    const verifyButton = document.getElementById('verify-payment');
+    if (verifyButton) {
+      LoadingManager.showButtonLoader('#verify-payment');
+    }
+    
+    return new Promise((resolve, reject) => {
+      // Convert file to base64 first
+      const reader = new FileReader();
+      
+      reader.onload = (e) => {
+        try {
+          // Get the base64 data without the prefix
+          const base64Data = e.target.result.split(',')[1];
+          
+          // Create data object to send to the server
+          const dataToSend = {
+            fileContent: base64Data,
+            fileName: file.name,
+            fileType: file.type,
+            fileSize: file.size,
+            bookingReference: bookingReference,
+            expectedAmount: expectedAmount,
+            // Include all verification options
+            ...verificationOptions
+          };
+          
+          console.log("Sending file:", file.name, "size:", file.size, "type:", file.type);
+          console.log("With reference:", bookingReference, "expected amount:", expectedAmount);
+          
+          // Use the existing request method
+          this.request('verifyInstapayPayment', dataToSend, {
+            loaderTitle: 'Verifying Payment',
+            loaderMessage: 'Please wait while we verify your payment...',
+            hideToastOnSuccess: true,
+            errorMessage: 'Could not verify payment. Please try again.'
+          })
+          .then(resolve)
+          .catch(reject);
+        } 
+        catch (error) {
+          console.error('Error preparing file data:', error);
+          reject(error);
+        }
+      };
+      
+      reader.onerror = (error) => {
+        console.error('Error reading file:', error);
+        reject(error);
+      };
+      
+      // Start reading the file as data URL
+      reader.readAsDataURL(file);
+    });
+  },
+  
+  /**
+   * Cancel a booking
+   * @param {number} bookingId - ID of booking to cancel
+   * @returns {Promise} Promise that resolves with canceled booking
+   */
+  cancelBooking: function(bookingId) {
+    return this.request('cancelBooking', { bookingId }, {
+      loaderTitle: 'Canceling Booking',
+      loaderMessage: 'Please wait while we process your cancellation...',
+      successMessage: 'Booking canceled successfully!'
+    });
+  }
+};
+
+// ===== EVENT HANDLERS =====
+// Setup global event listeners
+const setupEventListeners = () => {
+  // Navigation
+  const tabResources = DOM.byId('tab-resources');
+  const tabBookings = DOM.byId('tab-bookings');
+  
+  if (tabResources) {
+    tabResources.addEventListener('click', UI.showResourcesView);
+  }
+  
+  if (tabBookings) {
+    tabBookings.addEventListener('click', UI.showBookingsView);
+  }
+  
+  // Booking filters
+  const filterUpcoming = DOM.byId('filter-upcoming');
+  const filterPast = DOM.byId('filter-past');
+  
+  if (filterUpcoming) {
+    filterUpcoming.addEventListener('click', () => UI.setBookingFilter('upcoming'));
+  }
+  
+  if (filterPast) {
+    filterPast.addEventListener('click', () => UI.setBookingFilter('past'));
+  }
+  
+  // Modal close buttons
+  const modalCloseButtons = document.querySelectorAll('.modal-close');
+  modalCloseButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      const modalId = button.closest('.modal').id;
+      if (modalId === 'booking-modal') {
+        BookingModal.hide();
+      } else if (modalId === 'cancel-modal') {
+        CancelModal.hide();
+      }
+    });
+  });
+
+  const continueToPayment = DOM.byId('continue-to-payment');
+  if (continueToPayment) {
+    continueToPayment.addEventListener('click', BookingModal.continueToPayment);
+  }
+    
+  const backToSelection = DOM.byId('back-to-selection');
+  if (backToSelection) {
+    backToSelection.addEventListener('click', () => {
+      BookingModal.hideAllSteps();
+      DOM.show(DOM.byId('booking-step-1'));
+    });
+  }
+  
+  const proceedToPayment = DOM.byId('proceed-to-payment');
+  if (proceedToPayment) {
+    proceedToPayment.addEventListener('click', BookingModal.proceedToPaymentDetails);
+  }
+  
+  const backToMethods = DOM.byId('back-to-methods');
+  if (backToMethods) {
+    backToMethods.addEventListener('click', () => {
+      BookingModal.hideAllSteps();
+      DOM.show(DOM.byId('booking-step-2'));
+    });
+  }
+  
+  const backToMethodsFromCard = DOM.byId('back-to-methods-from-card');
+  if (backToMethodsFromCard) {
+    backToMethodsFromCard.addEventListener('click', () => {
+      BookingModal.hideAllSteps();
+      DOM.show(DOM.byId('booking-step-2'));
+    });
+  }
+  
+  const backToMethodsFromOther = DOM.byId('back-to-methods-from-other');
+  if (backToMethodsFromOther) {
+    backToMethodsFromOther.addEventListener('click', () => {
+      BookingModal.hideAllSteps();
+      DOM.show(DOM.byId('booking-step-2'));
+    });
+  }
+  
+  const verifyPayment = DOM.byId('verify-payment');
+  if (verifyPayment) {
+    verifyPayment.addEventListener('click', BookingModal.verifyPayment);
+  }
+  
+  // Confirmation button after verification
+  const confirmBooking = DOM.byId('confirm-booking');
+  if (confirmBooking) {
+    confirmBooking.addEventListener('click', () => {
+      BookingModal.hide();
+      Toast.show('success', 'Your booking is confirmed! Check My Bookings to see details.');
+      UI.renderResources();
+    });
+  }
+  
+  const processCardPayment = DOM.byId('process-card-payment');
+  if (processCardPayment) {
+    processCardPayment.addEventListener('click', BookingModal.processCardPayment);
+  }
+  
+  const continueToExternal = DOM.byId('continue-to-external');
+  if (continueToExternal) {
+    continueToExternal.addEventListener('click', BookingModal.continueToExternalPayment);
+  }
+  
+  // File upload
+  const paymentScreenshot = DOM.byId('payment-screenshot');
+  if (paymentScreenshot) {
+    paymentScreenshot.addEventListener('change', BookingModal.handleFileUpload);
+  }
+  
+  // Cancel modal
+  const cancelNo = DOM.byId('cancel-no');
+  if (cancelNo) {
+    cancelNo.addEventListener('click', CancelModal.hide);
+  }
+};
+
+// ===== INITIALIZATION =====
+// Updated DOMContentLoaded event listener with loading screens initialization
+// Add this to your initialization code
+
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    console.log('Initializing KROO Reservations App...');
+    
+    // Show initial loading screen
+    LoadingManager.showFullPageLoader('Initializing', 'Setting up KROO Reservations...');
+    
+    // Create loader elements
+    const fullPageLoader = document.createElement('div');
+    fullPageLoader.className = 'full-page-loader';
+    fullPageLoader.innerHTML = `
+      <div class="loader-content">
+        <div class="loader-icon">
+          <div class="loader-spinner"></div>
+        </div>
+        <h3 class="loader-title">Loading</h3>
+        <p class="loader-message">Please wait...</p>
+      </div>
+    `;
+    document.body.appendChild(fullPageLoader);
+    
+    // Initialize user from URL parameters
+    AppState.initializeUser();
+    
+    // Setup welcome banner
+    setupWelcomeBanner();
+    
+    // Store original resources data as fallback
+    window.resources = [...resources];
+    
+    // Setup event listeners
+    setupEventListeners();
+    
+    // Render resources (this will now include its own loading indicators)
+    UI.renderResources();
+    
+    // Hide initial loading screen after a short delay
+    setTimeout(() => {
+      LoadingManager.hideFullPageLoader();
+      console.log('KROO Reservations App initialized successfully');
+    }, 1000);
+  } catch (error) {
+    // Hide loader if there's an error
+    LoadingManager.hideFullPageLoader();
+    console.error('Error initializing application:', error);
+    Toast.show('error', 'Could not initialize the application. Please refresh the page.');
+  }
+});
+
+</script>

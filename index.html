@@ -1,0 +1,412 @@
+<? const indexCSS = "index-css" ?>
+<? const indexJS = "index-js" ?>
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KROO Reservations</title>
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts - Inter -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Custom CSS -->
+  <?!= _I(indexCSS) ?>
+</head>
+
+<body>
+
+  <!-- Hidden inputs for user parameters -->
+  <input type="hidden" id="user-email" value="<?= userEmail ?>">
+  <input type="hidden" id="user-name" value="<?= userName ?>">
+  <input type="hidden" id="user-discount" value="<?= userDiscount ?>">
+  <input type="hidden" id="is-admin" value="<?= isAdmin ?>">
+
+  <!-- Full Page Loader -->
+  <div class="full-page-loader">
+    <div class="loader-content">
+      <div class="loader-icon">
+        <div class="loader-spinner"></div>
+      </div>
+      <h3 class="loader-title">Loading</h3>
+      <p class="loader-message">Please wait...</p>
+    </div>
+  </div>
+
+  <!-- Toast Notification (Template) -->
+  <div id="toast-template" class="toast template">
+    <div class="toast-icon">
+      <div class="toast-icon-success">
+        <i class="fas fa-check"></i>
+      </div>
+    </div>
+    <div class="toast-message">
+      <!-- Message will be inserted dynamically -->
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header>
+    <div class="container">
+      <div class="header-content">
+        <h1 class="app-title">KROO Reservations</h1>
+        <nav class="tabs">
+          <button id="tab-resources" class="tab-button active">All Resources</button>
+          <button id="tab-bookings" class="tab-button">My Bookings</button>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main>
+    <div class="container">
+      <!-- Resources View -->
+      <div id="resources-view" class="resource-grid">
+        <!-- Resources will be dynamically inserted here -->
+      </div>
+
+      <!-- My Bookings View -->
+      <div id="bookings-view" class="bookings-view" style="display: none;">
+        <div class="bookings-header">
+          <h2 class="bookings-title">My Bookings</h2>
+          <div class="filter-buttons">
+            <button id="filter-upcoming" class="filter-btn active">Upcoming</button>
+            <button id="filter-past" class="filter-btn">Past</button>
+          </div>
+        </div>
+
+        <div id="bookings-list" class="bookings-list">
+          <!-- Bookings will be dynamically inserted here -->
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Templates for dynamic content -->
+
+  <!-- Resource Card Template -->
+  <template id="resource-card-template">
+    <div class="resource-card">
+      <div class="card-image">
+        <img src="" alt="">
+        <div class="status-badge">
+          <!-- Status text will be inserted dynamically -->
+        </div>
+      </div>
+      <div class="card-content">
+        <h3 class="card-title"></h3>
+        <div class="card-details">
+          <div class="detail-item location">
+            <i class="fas fa-map-marker-alt"></i>
+            <span></span>
+          </div>
+          <div class="detail-item capacity">
+            <i class="fas fa-users"></i>
+            <span></span>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="btn"></button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- Booking Card Template -->
+  <template id="booking-card-template">
+    <div class="booking-card">
+      <div class="booking-header">
+        <h3 class="booking-title"></h3>
+        <span class="booking-badge"></span>
+      </div>
+      <div class="booking-details">
+        <div class="detail-item date">
+          <i class="far fa-calendar-alt"></i>
+          <span></span>
+        </div>
+        <div class="detail-item time">
+          <i class="far fa-clock"></i>
+          <span></span>
+        </div>
+      </div>
+      <button class="btn btn-outline btn-danger">Cancel Booking</button>
+    </div>
+  </template>
+
+  <!-- Date Button Template -->
+  <template id="date-button-template">
+    <button class="date-button">
+      <span class="date-month"></span>
+      <span class="date-day"></span>
+      <span class="date-weekday"></span>
+    </button>
+  </template>
+
+  <!-- Time Slot Template -->
+  <template id="time-slot-template">
+    <div class="time-slot">
+      <span></span>
+    </div>
+  </template>
+
+  <!-- Payment Method Template -->
+  <template id="payment-method-template">
+    <div class="payment-method" data-method="">
+      <div class="payment-method-icon">
+        <img src="" alt="">
+      </div>
+      <div class="payment-method-details">
+        <h4></h4>
+        <p></p>
+      </div>
+    </div>
+  </template>
+
+  <!-- Booking Modal -->
+  <div id="booking-modal" class="modal">
+    <div class="modal-content">
+      <!-- Modal Header -->
+      <div class="modal-header">
+        <h3 id="modal-title" class="modal-title">Book Resource</h3>
+        <button id="modal-close" class="modal-close">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+
+      <!-- Step 1: Date & Time Selection -->
+      <div id="booking-step-1" class="modal-body">
+        <!-- Date Selection -->
+        <div>
+          <h4 class="section-title">Select Date</h4>
+          <div class="date-carousel">
+            <button id="date-prev" class="date-nav-btn">
+              <i class="fas fa-chevron-left"></i>
+            </button>
+            <div id="date-buttons" class="date-buttons">
+              <!-- Date buttons will be dynamically inserted here -->
+            </div>
+            <button id="date-next" class="date-nav-btn">
+              <i class="fas fa-chevron-right"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Time Slots -->
+        <div>
+          <h4 class="section-title">Select Time Range</h4>
+
+          <div id="time-slots" class="time-slots">
+            <!-- Time slots will be dynamically inserted here -->
+          </div>
+
+          <div id="time-visualization" class="time-visualization">
+            <!-- Time visualization will be dynamically inserted here -->
+          </div>
+
+          <!-- Selected Slot Summary -->
+          <div id="selection-summary" class="selection-summary" style="display: none;">
+            <h4 class="summary-header">Your Selection</h4>
+            <div class="summary-details">
+              <div class="summary-info">
+                <div id="selected-date" class="detail-item"><i class="far fa-calendar-alt"></i> <span></span></div>
+                <div id="selected-time" class="detail-item"><i class="far fa-clock"></i> <span></span></div>
+              </div>
+              <button id="change-selection" class="summary-change">Change</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Selected Slot Summary -->
+        <div id="selection-summary" class="selection-summary" style="display: none;">
+          <h4 class="summary-header">Your Selection</h4>
+          <div class="summary-details">
+            <div>
+              <div id="selected-date" class="detail-item"></div>
+              <div id="selected-time" class="detail-item"></div>
+            </div>
+            <button id="change-selection" class="summary-change">Change</button>
+          </div>
+        </div>
+
+        <!-- Continue Button -->
+        <button id="continue-to-payment" class="btn btn-primary" disabled>Continue to Payment</button>
+      </div>
+
+      <!-- Step 2: Payment Method Selection -->
+      <div id="booking-step-2" class="modal-body" style="display: none;">
+        <h4 class="section-title">Select Payment Method</h4>
+
+        <div id="payment-methods" class="payment-methods">
+          <!-- Payment methods will be dynamically inserted here -->
+        </div>
+
+        <!-- Booking Summary -->
+        <div class="selection-summary">
+          <h4 class="summary-header">Booking Summary</h4>
+          <div class="summary-details summary-grid">
+            <div class="detail-item">
+              <span class="detail-label">Resource:</span>
+              <span id="summary-resource" class="detail-value"></span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Date:</span>
+              <span id="summary-date" class="detail-value"></span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Time:</span>
+              <span id="summary-time" class="detail-value"></span>
+            </div>
+            <div class="detail-item summary-total">
+              <span class="detail-label">Amount:</span>
+              <span class="detail-value">₱500.00</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="button-group">
+          <button id="back-to-selection" class="btn btn-outline">Back</button>
+          <button id="proceed-to-payment" class="btn btn-primary" disabled>Proceed to Payment</button>
+        </div>
+      </div>
+
+      <!-- Step 3: InstaPay Payment Details -->
+      <div id="booking-step-3" class="modal-body" style="display: none;">
+        <h4 class="section-title">InstaPay Payment Details</h4>
+
+        <div class="payment-info">
+          <i class="fas fa-info-circle"></i>
+          <p>
+            Please complete payment via InstaPay to confirm your booking. Use the details below, then upload a
+            screenshot of your payment receipt for verification.
+          </p>
+        </div>
+
+        <div class="payment-details">
+          <div class="payment-details-grid">
+            <div class="payment-label">Amount:</div>
+            <div class="payment-value">EGP500.00</div>
+            <div class="payment-label">InstaPay Account:</div>
+            <div class="payment-value">@kroo.cc</div>
+            <div class="payment-label">Reference:</div>
+            <div id="payment-reference" class="payment-value">KR-<span id="payment-ref-num"></span></div>
+          </div>
+        </div>
+
+        <div class="file-upload">
+          <label class="file-upload-label">Upload Payment Receipt</label>
+          <label for="payment-screenshot" class="file-upload-area">
+            <div id="upload-instructions">
+              <div class="file-upload-icon">
+                <i class="fas fa-cloud-upload-alt"></i>
+              </div>
+              <p class="file-upload-text"><span class="bold">Click to upload</span> or drag and drop</p>
+              <p class="file-upload-hint">PNG, JPG or PDF (max. 5MB)</p>
+            </div>
+            <div id="file-preview" class="file-preview" style="display: none;">
+              <img id="preview-image" src="" alt="Preview">
+            </div>
+            <input id="payment-screenshot" type="file" accept="image/*,.pdf" style="display: none;">
+          </label>
+        </div>
+
+        <!-- Verification Status -->
+        <div id="verification-status" class="verification-status" style="display: none;">
+          <!-- Will be dynamically populated -->
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="button-group">
+          <button id="back-to-methods" class="btn btn-outline">Back</button>
+          <button id="verify-payment" class="btn btn-success" disabled>Verify Payment & Confirm</button>
+        </div>
+      </div>
+
+      <!-- Step 4: Credit Card Form -->
+      <div id="booking-step-4" class="modal-body" style="display: none;">
+        <h4 class="section-title">Enter Card Details</h4>
+
+        <div class="form-group">
+          <label class="form-label" for="card-number">Card Number</label>
+          <input type="text" id="card-number" class="form-input" placeholder="1234 5678 9012 3456">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="card-expiry">Expiry Date</label>
+            <input type="text" id="card-expiry" class="form-input" placeholder="MM/YY">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="card-cvc">CVC</label>
+            <input type="text" id="card-cvc" class="form-input" placeholder="123">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="card-name">Cardholder Name</label>
+          <input type="text" id="card-name" class="form-input" placeholder="John Doe">
+        </div>
+
+        <!-- Payment Summary -->
+        <div class="selection-summary">
+          <h4 class="summary-header">Payment Summary</h4>
+          <div class="summary-details payment-detail">
+            <span class="detail-label">Reservation Fee:</span>
+            <span class="detail-value">₱500.00</span>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="button-group">
+          <button id="back-to-methods-from-card" class="btn btn-outline">Back</button>
+          <button id="process-card-payment" class="btn btn-success">Pay ₱500.00</button>
+        </div>
+      </div>
+
+      <!-- Step 5: Other Payment Methods (placeholder) -->
+      <div id="booking-step-5" class="modal-body" style="display: none;">
+        <div class="payment-method-center">
+          <div class="payment-method-logo">
+            <img id="payment-method-logo" src="" alt="Payment Method Logo">
+          </div>
+          <h4 id="payment-method-title" class="payment-method-heading">Payment Instructions</h4>
+          <p id="payment-method-instructions" class="payment-method-text">
+            You will be redirected to complete your payment.
+          </p>
+          <div class="payment-action-buttons">
+            <button id="back-to-methods-from-other" class="btn btn-outline">Back</button>
+            <button id="continue-to-external" class="btn btn-success">Continue</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cancel Booking Modal -->
+  <div id="cancel-modal" class="modal">
+    <div class="modal-content modal-sm">
+      <div class="modal-body">
+        <div class="modal-header-simple">
+          <h3 class="modal-title">Cancel Booking</h3>
+          <button id="cancel-modal-close" class="modal-close">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <p class="modal-message">
+          Are you sure you want to cancel this booking? This action cannot be undone.
+        </p>
+        <div class="button-group">
+          <button id="cancel-no" class="btn btn-secondary">No, Keep It</button>
+          <button id="cancel-yes" class="btn btn-danger">Yes, Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript -->
+  <?!= _I(indexJS) ?>
+</body>
+
+</html>

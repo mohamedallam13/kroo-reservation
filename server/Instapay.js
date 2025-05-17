@@ -114,68 +114,97 @@
  */
 
   function processAndVerifyReceipt(imageInput, options = {}) {
-    // Default options
-    const verificationOptions = {
-      // maxAgeMins: options.maxAgeMins || 10,
-      maxAgeMins: 1000,
-      strictMetadataCheck: options.strictMetadataCheck || false,
-      expectedAmount: options.expectedAmount, // The expected transaction amount
-      allowMoreThanExpected: options.allowMoreThanExpected !== false // Default to true
-    };
+    try {
+      // Default options
+      const verificationOptions = {
+        // maxAgeMins: options.maxAgeMins || 10,
+        maxAgeMins: 3000,
+        strictMetadataCheck: options.strictMetadataCheck || false,
+        expectedAmount: options.expectedAmount, // The expected transaction amount
+        allowMoreThanExpected: options.allowMoreThanExpected !== false // Default to true
+      };
 
-    // Handle different input types
-    let base64;
+      // Handle different input types
+      let base64;
 
-    // Check if imageInput is already base64
-    if (typeof imageInput === 'string' && imageInput.match(/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/)) {
-      // Input is already base64
-      Logger.log("Input is already base64 string");
-      base64 = imageInput;
-    }
-    // Check if it's a blob object with getBytes method
-    else if (imageInput && typeof imageInput.getBytes === 'function') {
-      // Convert blob to base64
-      Logger.log("Converting blob to base64");
-      base64 = Utilities.base64Encode(imageInput.getBytes());
-    }
-    // Check if it's an object with data property containing base64
-    else if (imageInput && imageInput.data && typeof imageInput.data === 'string') {
-      Logger.log("Extracting base64 from object.data");
-      base64 = imageInput.data;
-    }
-    // Handle other cases
-    else {
-      throw new Error("Invalid image input: Must be a blob or base64 string");
-    }
-
-    const INSTAPAY_CLOUD_FUNCTION = PropertiesService.getScriptProperties().getProperty("instapayCloudFunction")
-
-    // Call the OCR processing service
-    const response = UrlFetchApp.fetch(INSTAPAY_CLOUD_FUNCTION, {
-      method: "post",
-      contentType: "application/json",
-      payload: JSON.stringify({ base64Image: base64 })
-    });
-
-    // Parse the OCR result
-    const ocrResult = JSON.parse(response.getContentText());
-    Logger.log("OCR Result:");
-    Logger.log(ocrResult);
-
-    // Verify the transaction
-    const verificationResult = verifyInstapayTransaction(ocrResult, verificationOptions);
-
-    Logger.log("Verification Result:");
-    Logger.log(verificationResult);
-
-    const responseToFrontEnd = {
-      success: true, result: {
-        ocrResult: ocrResult,
-        verification: verificationResult
+      // Check if imageInput is already base64
+      if (typeof imageInput === 'string' && imageInput.match(/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/)) {
+        // Input is already base64
+        Logger.log("Input is already base64 string");
+        base64 = imageInput;
       }
-    }
+      // Check if it's a blob object with getBytes method
+      else if (imageInput && typeof imageInput.getBytes === 'function') {
+        // Convert blob to base64
+        Logger.log("Converting blob to base64");
+        base64 = Utilities.base64Encode(imageInput.getBytes());
+      }
+      // Check if it's an object with data property containing base64
+      else if (imageInput && imageInput.data && typeof imageInput.data === 'string') {
+        Logger.log("Extracting base64 from object.data");
+        base64 = imageInput.data;
+      }
+      // Handle other cases
+      else {
+        throw new Error("Invalid image input: Must be a blob or base64 string");
+      }
 
-    return JSON.stringify(responseToFrontEnd);
+      const INSTAPAY_CLOUD_FUNCTION = PropertiesService.getScriptProperties().getProperty("instapayCloudFunction");
+
+      try {
+        // Call the OCR processing service with muteHttpExceptions to catch server errors
+        const response = UrlFetchApp.fetch(INSTAPAY_CLOUD_FUNCTION, {
+          method: "post",
+          contentType: "application/json",
+          payload: JSON.stringify({ base64Image: base64 }),
+          muteHttpExceptions: true // This prevents exceptions on HTTP errors
+        });
+
+        // Check if the response is a 500 or other error
+        if (response.getResponseCode() >= 400) {
+          Logger.log("OCR service error: " + response.getResponseCode());
+          return JSON.stringify({
+            success: false,
+            error: "This doesn't appear to be a valid Instapay receipt. Please upload a screenshot of your payment."
+          });
+        }
+
+        // Parse the OCR result
+        const ocrResult = JSON.parse(response.getContentText());
+        Logger.log("OCR Result:");
+        Logger.log(ocrResult);
+
+        // Verify the transaction
+        const verificationResult = verifyInstapayTransaction(ocrResult, verificationOptions);
+
+        Logger.log("Verification Result:");
+        Logger.log(verificationResult);
+
+        const responseToFrontEnd = {
+          success: true,
+          result: {
+            ocrResult: ocrResult,
+            verification: verificationResult
+          }
+        };
+
+        return JSON.stringify(responseToFrontEnd);
+      } catch (fetchError) {
+        // Catch any errors during the API call or processing
+        Logger.log("Error calling OCR service: " + fetchError);
+        return JSON.stringify({
+          success: false,
+          error: "This doesn't appear to be a valid Instapay receipt. Please upload a screenshot of your payment."
+        });
+      }
+    } catch (generalError) {
+      // Catch any general errors
+      Logger.log("General error in processAndVerifyReceipt: " + generalError);
+      return JSON.stringify({
+        success: false,
+        error: "This doesn't appear to be a valid Instapay receipt. Please upload a screenshot of your payment."
+      });
+    }
   }
 
   /**
@@ -189,6 +218,7 @@
    * @returns {Object} Verification result with status and reasons
    */
   function verifyInstapayTransaction(ocrResult, options = {}) {
+    console.log(ocrResult)
     // Default options
     const config = {
       maxAgeMins: options.maxAgeMins || 10,
@@ -197,14 +227,20 @@
       allowMoreThanExpected: options.allowMoreThanExpected !== false // Default to true
     };
 
-    // Initialize result object
+    // Initialize result object with clear status flags
     const result = {
       isLegitimate: true,
       isRightAmount: true,
       amountStatus: "exact", // "exact", "more", "less", or "invalid"
       remainder: 0,          // Positive: we owe them, Negative: they owe us
       reasons: [],
-      warnings: []
+      warnings: [],
+      // Add explicit flags for key fields
+      hasReferenceNumber: false,
+      hasTimestamp: false,
+      hasAmount: false,
+      hasStatus: false,
+      metadataTimestampUsed: false
     };
 
     // 1. Check transaction status
@@ -212,7 +248,9 @@
     if (!statusField) {
       result.isLegitimate = false;
       result.reasons.push("Missing transaction status field");
+      result.hasStatus = false;
     } else {
+      result.hasStatus = true;
       const statusText = statusField.value.toLowerCase();
       const successPatterns = [
         'successful',
@@ -232,36 +270,96 @@
     }
 
     // 2. Verify transaction date and time
-    const dateField = findField(ocrResult.fields, 'date');
-    if (!dateField) {
-      result.warnings.push("Missing date field");
-    } else {
+    // First check for metadata timestamp
+    let hasValidTimestamp = false;
+    let transactionDate = null;
+
+    // Check metadata first (if available)
+    if (ocrResult.metadata &&
+      (ocrResult.metadata.DateTimeOriginal ||
+        ocrResult.metadata.CreateDate ||
+        ocrResult.metadata.ModifyDate)) {
+
+      // Use the first available metadata timestamp
+      const metaTimestamp = ocrResult.metadata.DateTimeOriginal ||
+        ocrResult.metadata.CreateDate ||
+        ocrResult.metadata.ModifyDate;
+
       try {
-        // Parse the date from the OCR text
-        const transactionDate = parseTransactionDate(dateField.value);
-
-        if (!transactionDate || isNaN(transactionDate.getTime())) {
-          result.warnings.push(`Could not parse transaction date: ${dateField.value}`);
-        } else {
-          // Check if transaction is recent enough
-          const currentTime = new Date();
-          const diffMs = currentTime - transactionDate;
-          const diffMins = Math.floor(diffMs / 60000);
-
-          if (diffMins > config.maxAgeMins) {
-            result.isLegitimate = false;
-            result.reasons.push(`Transaction is too old (${diffMins} minutes, max allowed: ${config.maxAgeMins})`);
-          }
-
-          // Check if the transaction date is in the future
-          if (transactionDate > currentTime) {
-            result.isLegitimate = false;
-            result.reasons.push(`Transaction date is in the future: ${dateField.value}`);
-          }
+        // Parse metadata timestamp
+        const metaDate = new Date(metaTimestamp);
+        if (!isNaN(metaDate.getTime())) {
+          transactionDate = metaDate;
+          hasValidTimestamp = true;
+          result.metadataTimestampUsed = true;
+          console.log("Using metadata timestamp:", metaTimestamp);
         }
-      } catch (error) {
-        result.warnings.push(`Error processing date: ${error.message}`);
+      } catch (e) {
+        console.log("Could not parse metadata timestamp:", e);
       }
+    }
+
+    // If no metadata timestamp, try OCR date field
+    if (!hasValidTimestamp) {
+      const dateField = findField(ocrResult.fields, 'date');
+      if (!dateField) {
+        result.warnings.push("Missing date field");
+        result.hasTimestamp = false;
+      } else {
+        try {
+          // Parse the date from the OCR text
+          transactionDate = parseTransactionDate(dateField.value);
+
+          if (!transactionDate || isNaN(transactionDate.getTime())) {
+            result.warnings.push(`Could not parse transaction date: ${dateField.value}`);
+            result.hasTimestamp = false;
+          } else {
+            hasValidTimestamp = true;
+            result.hasTimestamp = true;
+          }
+        } catch (error) {
+          result.warnings.push(`Error processing date: ${error.message}`);
+          result.hasTimestamp = false;
+        }
+      }
+    } else {
+      // If we used metadata timestamp, still mark hasTimestamp
+      result.hasTimestamp = true;
+    }
+
+    // Check timestamp validity if we have one
+    if (hasValidTimestamp) {
+      // Check if transaction is recent enough
+      const currentTime = new Date();
+      const diffMs = currentTime - transactionDate;
+      const diffMins = Math.floor(diffMs / 60000);
+
+      if (diffMins > config.maxAgeMins) {
+        result.isLegitimate = false;
+  
+        // Format the time difference in a human-readable way
+        let timeAgoMessage;
+        if (diffMins < 60) {
+          timeAgoMessage = `${diffMins} minutes`;
+        } else if (diffMins < 1440) {
+          const hours = Math.floor(diffMins / 60);
+          timeAgoMessage = `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+        } else {
+          const days = Math.floor(diffMins / 1440);
+          timeAgoMessage = `${days} ${days === 1 ? 'day' : 'days'}`;
+        }
+        result.reasons.push(`Transaction is too old (${timeAgoMessage} ago, max allowed: ${config.maxAgeMins} minutes)`);
+      }
+
+      // Check if the transaction date is in the future
+      if (transactionDate > currentTime) {
+        result.isLegitimate = false;
+        result.reasons.push(`Transaction date is in the future: ${transactionDate.toISOString()}`);
+      }
+    } else if (!result.hasTimestamp) {
+      // No valid timestamp found - add as a reason
+      result.isLegitimate = false;
+      result.reasons.push("No valid transaction timestamp found");
     }
 
     // 3. Check for suspicious indicators
@@ -309,23 +407,30 @@
       }
     }
 
-    // 5. Check for required fields
-    const requiredFields = ['amount', 'from', 'to', 'reference'];
-    const missingFields = requiredFields.filter(fieldName =>
-      !findField(ocrResult.fields, fieldName)
-    );
+    // 5. Explicitly check for required fields, especially reference number
+    const referenceField = findField(ocrResult.fields, 'reference');
+    if (!referenceField) {
+      result.isLegitimate = false;
+      result.reasons.push("Missing required reference number field");
+      result.hasReferenceNumber = false;
+    } else {
+      result.hasReferenceNumber = true;
 
-    if (missingFields.length > 0) {
-      result.warnings.push(`Missing required fields: ${missingFields.join(', ')}`);
-      if (missingFields.length > 2) {  // If too many fields are missing, mark as illegitimate
-        result.isLegitimate = false;
-        result.reasons.push("Too many required fields are missing");
+      // Most InstaPay reference numbers are standard lengths
+      if (referenceField.value.length < 8) {
+        result.warnings.push(`Reference number seems too short: ${referenceField.value}`);
       }
     }
 
-    // 6. Check actual values
+    // 6. Check actual amount value
     const amountField = findField(ocrResult.fields, 'amount');
-    if (amountField) {
+    if (!amountField) {
+      result.isLegitimate = false;
+      result.reasons.push("Missing required amount field");
+      result.hasAmount = false;
+    } else {
+      result.hasAmount = true;
+
       const amount = parseFloat(amountField.value);
       if (isNaN(amount) || amount <= 0) {
         result.isLegitimate = false;
@@ -372,13 +477,16 @@
       }
     }
 
-    const referenceField = findField(ocrResult.fields, 'reference');
-    if (referenceField && referenceField.value) {
-      // Most InstaPay reference numbers are standard lengths
-      if (referenceField.value.length < 8) {
-        result.warnings.push(`Reference number seems too short: ${referenceField.value}`);
-      }
-    }
+    // Add debug information to understand what's happening
+    console.log("Verification result:", {
+      isLegitimate: result.isLegitimate,
+      hasReferenceNumber: result.hasReferenceNumber,
+      hasTimestamp: result.hasTimestamp,
+      hasAmount: result.hasAmount,
+      hasStatus: result.hasStatus,
+      metadataTimestampUsed: result.metadataTimestampUsed,
+      reasons: result.reasons
+    });
 
     return result;
   }

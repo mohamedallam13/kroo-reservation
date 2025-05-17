@@ -148,8 +148,10 @@
       throw new Error("Invalid image input: Must be a blob or base64 string");
     }
 
+    const INSTAPAY_CLOUD_FUNCTION = PropertiesService.getScriptProperties().getProperty("instapayCloudFunction")
+
     // Call the OCR processing service
-    const response = UrlFetchApp.fetch("https://europe-west1-curious-skyline-459313-r6.cloudfunctions.net/processReceipt", {
+    const response = UrlFetchApp.fetch(INSTAPAY_CLOUD_FUNCTION, {
       method: "post",
       contentType: "application/json",
       payload: JSON.stringify({ base64Image: base64 })

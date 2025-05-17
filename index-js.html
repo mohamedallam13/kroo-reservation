@@ -267,6 +267,7 @@ const AppState = {
   uploadedFile: null,
   verifiedPayments: [],
   currentBookingFilter: 'upcoming',
+    isSubmitting: false,
   
   // User properties
   userEmail: '',
@@ -308,6 +309,20 @@ const AppState = {
       phone: this.userPhone,
       discount: this.userDiscount
     });
+  },
+
+    // New method to safely handle submissions
+  beginSubmission: function() {
+    if (this.isSubmitting) {
+      console.warn('Submission already in progress, preventing duplicate submission');
+      return false;
+    }
+    this.isSubmitting = true;
+    return true;
+  },
+  
+  endSubmission: function() {
+    this.isSubmitting = false;
   }
 };
 
@@ -1280,9 +1295,6 @@ const BookingModal = {
       Toast.show('error', 'Resource not found');
       return;
     }
-    
-    // Set the room label from the resource
-    AppState.setResourceLabel(resource.label);
 
     // Reset modal state
     BookingModal.resetState();
@@ -2463,54 +2475,19 @@ processBookingWithCash: () => {
   // Show loading screen
   LoadingManager.showFullPageLoader('Processing', 'Confirming your cash booking...');
   
-  // Simulate API call
-  setTimeout(() => {
-    if (!AppState.selectedTimeSlot || !AppState.currentResourceId) {
+  // Update AppState to indicate cash payment
+  AppState.selectedPaymentMethod = 'cash';
+  
+  // Process the booking
+  BookingModal.processBooking()
+    .then(() => {
       LoadingManager.hideFullPageLoader();
-      Toast.show('error', 'Invalid booking data');
-      return;
-    }
-    
-    const resource = resources.find(r => r.id === AppState.currentResourceId);
-    if (!resource) {
+    })
+    .catch(error => {
       LoadingManager.hideFullPageLoader();
-      return;
-    }
-    
-    // Create booking with cash payment flag
-    const newBooking = {
-      id: Date.now(),
-      resourceId: AppState.currentResourceId,
-      resourceName: resource.name,
-      date: AppState.selectedTimeSlot.date,
-      startTime: AppState.selectedTimeSlot.startTime,
-      endTime: AppState.selectedTimeSlot.endTime,
-      status: 'CONFIRMED',
-      price: AppState.selectedTimeSlot.price,
-      paymentMethod: 'cash',
-      paymentStatus: 'pending' // Cash payments are pending until collected
-    };
-    
-    // Add to bookings
-    bookings.push(newBooking);
-    
-    // Add to booked slots
-    bookedSlots.push({
-      resourceId: AppState.currentResourceId,
-      date: AppState.selectedTimeSlot.date,
-      startTime: AppState.selectedTimeSlot.startTime,
-      endTime: AppState.selectedTimeSlot.endTime
+      console.error('Cash booking failed:', error);
+      // Error handling already done in processBooking
     });
-    
-    // Hide loading screen
-    LoadingManager.hideFullPageLoader();
-    
-    // Show success toast
-    Toast.show('success', 'Your cash booking is confirmed! Please pay when you arrive.');
-    
-    // Hide the modal
-    BookingModal.hide();
-  }, 1500);
 },
   
   handleFileUpload: (event) => {
@@ -2632,6 +2609,27 @@ processBookingWithCash: () => {
       // For insufficient amount, show "Add Payment" button
       if (verificationResult.amountStatus === 'less') {
         setupPartialPaymentButton();
+        return;
+      }
+      
+      // For successful verification, process the booking
+      if (verificationResult.isLegitimate && 
+          (verificationResult.isRightAmount || verificationResult.amountStatus === 'more')) {
+        
+        // Show confirmation button
+        const confirmationAction = DOM.byId('confirmation-action');
+        if (confirmationAction) {
+          DOM.show(confirmationAction);
+        }
+        
+        // Hide action buttons
+        const actionButtons = DOM.byId('verify-payment')?.parentNode;
+        if (actionButtons) {
+          DOM.hide(actionButtons);
+        }
+        
+        // Process the booking
+        BookingModal.handleVerifiedInstapayPayment();
       }
     })
     .catch(error => {
@@ -2793,27 +2791,17 @@ updateInstapayPaymentDetails:() =>{
   // Show loading on button
   LoadingManager.showButtonLoader('#process-card-payment');
   
-  // Simulate API call to process payment
+  // Simulate card payment processing
   setTimeout(() => {
     // Hide button loader
     LoadingManager.hideButtonLoader('#process-card-payment');
     
-    // Show full page loader for booking creation
-    LoadingManager.showFullPageLoader('Processing Payment', 'Your payment is being processed...');
-    
-    setTimeout(() => {
-      // Process the booking
-      BookingModal.processBooking();
-      
-      // Hide full page loader
-      LoadingManager.hideFullPageLoader();
-      
-      // Show success toast
-      Toast.show('success', 'Payment processed successfully!');
-      
-      // Hide the modal
-      BookingModal.hide();
-    }, 1500);
+    // Process the booking
+    BookingModal.processBooking()
+      .catch(error => {
+        console.error('Card payment booking failed:', error);
+        // Error handling already done in processBooking
+      });
   }, 1500);
 },
   
@@ -2829,86 +2817,125 @@ updateInstapayPaymentDetails:() =>{
     // Show full page loader
     LoadingManager.showFullPageLoader('Processing Payment', 'Completing your payment...');
     
-    setTimeout(() => {
-      // Process the booking
-      BookingModal.processBooking();
-      
-      // Hide button loader and full page loader
-      LoadingManager.hideButtonLoader('#continue-to-external');
-      LoadingManager.hideFullPageLoader();
-      
-      // Show success toast
-      Toast.show('success', 'Payment completed successfully!');
-      
-      // Hide the modal
-      BookingModal.hide();
-    }, 1500);
+    // Process the booking
+    BookingModal.processBooking()
+      .then(() => {
+        // Hide loaders
+        LoadingManager.hideButtonLoader('#continue-to-external');
+        LoadingManager.hideFullPageLoader();
+      })
+      .catch(error => {
+        // Hide loaders
+        LoadingManager.hideButtonLoader('#continue-to-external');
+        LoadingManager.hideFullPageLoader();
+        console.error('External payment booking failed:', error);
+        // Error handling already done in processBooking
+      });
   }, 1500);
+},
+
+handleVerifiedInstapayPayment: ()=> {
+  // This function is called when InstaPay verification succeeds
+  
+  // Process the booking (verification result already in AppState)
+  BookingModal.processBooking()
+    .catch(error => {
+      console.error('InstaPay booking failed after verification:', error);
+      // Error handling already done in processBooking
+    });
 },
   
 processBooking: () => {
+/**
+ * Unified booking processor that handles all payment methods consistently
+ * Steps: Formulate booking object → Add to buffer → Add to database → UI updates
+ */
+
+  // Don't proceed if essential data is missing
   if (!AppState.selectedTimeSlot || !AppState.currentResourceId) {
     Toast.show('error', 'Invalid booking data');
-    return;
+    return Promise.reject(new Error('Invalid booking data'));
   }
   
-  const resource = resources.find(r => r.id === AppState.currentResourceId);
-  if (!resource) return;
-  
-  // Get selected payment method
-  const selectedMethod = paymentMethods.find(method => method.id === AppState.selectedPaymentMethod);
-  
-  // Use the final price with discount if available, otherwise fall back to original price
-  const bookingPrice = AppState.selectedTimeSlot.finalPrice || AppState.selectedTimeSlot.price;
-  
-  // Create booking with payment information and user details
-  const newBooking = {
-    id: Date.now(),
-    resourceId: AppState.currentResourceId,
-    resourceName: resource.name,
-    date: AppState.selectedTimeSlot.date,
-    startTime: AppState.selectedTimeSlot.startTime,
-    endTime: AppState.selectedTimeSlot.endTime,
-    status: 'CONFIRMED',
-    price: bookingPrice, // Use the discounted price
-    originalPrice: AppState.selectedTimeSlot.price, // Store original price for reference
-    discountApplied: AppState.userDiscount || 0, // Store the discount percentage applied
-    paymentMethod: selectedMethod ? selectedMethod.id : 'unknown',
-    paymentStatus: 'completed',
+  try {
+    // Step 1: Formulate the booking request with all necessary data
+    const bookingRequest = formulateBookingRequest(AppState);
     
-    // Add user details
-    userDetails: {
-      email: AppState.userEmail,
-      name: AppState.userName,
-      phone: AppState.userPhone
-    },
+    // Step 2: Add payment-specific details if needed
+    let finalBookingRequest = bookingRequest;
     
-    // Add information about who created the booking
-    createdBy: {
-      email: AppState.userEmail,
-      isAdmin: AppState.isAdmin
+    if (AppState.selectedPaymentMethod === 'instapay' && AppState.verificationResult) {
+      finalBookingRequest = addPaymentDetailsToRequest(bookingRequest, AppState.verificationResult);
     }
-  };
-  
-  // Add to bookings
-  bookings.push(newBooking);
-  
-  // Add to booked slots
-  bookedSlots.push({
-    resourceId: AppState.currentResourceId,
-    date: AppState.selectedTimeSlot.date,
-    startTime: AppState.selectedTimeSlot.startTime,
-    endTime: AppState.selectedTimeSlot.endTime
-  });
-  
-  console.log('Booking created:', newBooking);
-  
-  // This would be where we add the API call in the future
-  // For now, just log that we would make an API call
-  console.log('Would make API call to create booking in backend');
+    
+    console.log('Processed booking request:', finalBookingRequest);
+    
+    // Step 3: Add to buffer (shows loading indicator automatically)
+    return API.addToBuffer(finalBookingRequest)
+      .then(response => {
+        // Parse response if needed
+        const result = typeof response === 'string' ? JSON.parse(response) : response;
+        
+        if (!result.success) {
+          throw new Error(result.message || 'Failed to create booking');
+        }
+        
+        console.log('Booking added to buffer successfully:', result);
+        
+        // Step 4: Add to database (no waiting)
+        API.addToDatabase(finalBookingRequest);
+        
+        // Step 5: Update local data for immediate UI feedback
+        updateLocalBookingsData(finalBookingRequest);
+        
+        // Show success message
+        Toast.show('success', 'Your booking has been confirmed!');
+        
+        // Hide modal after success
+        setTimeout(() => {
+          BookingModal.hide();
+        }, 1000);
+        
+        return result;
+      })
+      .catch(error => {
+        console.error('Error processing booking:', error);
+        Toast.show('error', error.message || 'Failed to create booking. Please try again.');
+        throw error;
+      });
+  } catch (error) {
+    console.error('Error preparing booking data:', error);
+    Toast.show('error', 'An error occurred while preparing your booking');
+    return Promise.reject(error);
+  }
 }
 
+}
 
+///////////////// BOOKING MODAL ENDS HERE, BELOW IS A HELPER FUNCTION FOR IT
+
+/**
+ * Update local data structures for immediate UI feedback
+ * Uses data already formatted by formulateBookingRequest
+ */
+function updateLocalBookingsData(bookingData) {
+  // The booking object is already properly formatted by formulateBookingRequest
+  // We just need to add a temporary ID for UI tracking
+  const uiBooking = {
+    ...bookingData,
+    id: Date.now() // Temporary ID until server assigns one
+  };
+  
+  // Add to bookings array for UI
+  bookings.push(uiBooking);
+  
+  // Add to booked slots for availability calculation
+  bookedSlots.push({
+    resourceId: bookingData.resourceId,
+    date: bookingData.date,
+    startTime: bookingData.startTime,
+    endTime: bookingData.endTime
+  });
 }
 
 // Optional: Admin filter component for bookings view
@@ -3049,6 +3076,7 @@ function formulateBookingRequest(currentState) {
     currentResourceId,
     selectedTimeSlot,
     selectedPaymentMethod,
+    bookingReference, // This is the previously generated booking reference
     uploadedFile,
     verificationResult,
     userEmail,
@@ -3073,12 +3101,9 @@ function formulateBookingRequest(currentState) {
   // Calculate price with discount if applicable
   const bookingPrice = selectedTimeSlot.finalPrice || selectedTimeSlot.price;
   
-  // Generate a booking reference
-  const reference = API.generateBookingReference();
-  
   // Base booking object
   const baseBooking = {
-    reference: reference,
+    reference: bookingReference,
     resourceId: currentResourceId,
     resourceName: resource.name,
     resourceLabel: resource.label,
@@ -3677,7 +3702,13 @@ const CancelModal = {
 // ===== MODIFY THE API MODULE =====
 // Using Google Apps Script's google.script.run for server communication
 
+// ===== API MODULE =====
+// Using Google Apps Script's google.script.run for server communication
+
 const API = {
+  // Track active requests by function name
+  activeRequests: {},
+  
   /**
    * Core request method that handles all API calls to Google Apps Script
    * @param {string} functionName - Server-side function to call
@@ -3692,8 +3723,25 @@ const API = {
       loaderTitle = 'Please Wait',
       hideToastOnSuccess = false,
       successMessage = 'Operation completed successfully',
-      errorMessage = 'Operation failed. Please try again.'
+      errorMessage = 'Operation failed. Please try again.',
+      preventDuplicateSubmission = true,  // Control submission locking
+      requestId = functionName  // Allow custom request ID for more granular control
     } = options;
+    
+    // Use specific request ID to track this particular request type
+    const trackingId = requestId;
+    
+    // Check for duplicate submission for this specific function
+    if (preventDuplicateSubmission && this.activeRequests[trackingId]) {
+      console.warn(`Preventing duplicate submission for: ${trackingId}`);
+      return Promise.reject(new Error(`Request ${trackingId} already in progress`));
+    }
+    
+    // Set submission flag for this specific function
+    if (preventDuplicateSubmission) {
+      this.activeRequests[trackingId] = true;
+      console.log(`Starting request: ${trackingId}`);
+    }
     
     return new Promise((resolve, reject) => {
       // Show loader if requested
@@ -3714,6 +3762,12 @@ const API = {
             Toast.show('success', successMessage);
           }
           
+          // Reset submission flag for this specific function
+          if (preventDuplicateSubmission) {
+            delete API.activeRequests[trackingId];
+            console.log(`Completed request: ${trackingId}`);
+          }
+          
           // Resolve with response
           resolve(response);
         })
@@ -3728,6 +3782,12 @@ const API = {
           // Show error toast
           Toast.show('error', errorMessage);
           
+          // Reset submission flag for this specific function
+          if (preventDuplicateSubmission) {
+            delete API.activeRequests[trackingId];
+            console.log(`Failed request: ${trackingId}`);
+          }
+          
           // Reject with error
           reject(error);
         })
@@ -3740,64 +3800,63 @@ const API = {
    * @returns {Promise} Promise that resolves with processed resources
    */
   fetchResources: function() {
-    return new Promise((resolve, reject) => {
-      this.request('fetchData', {}, {
-        loaderTitle: 'Loading Resources',
-        loaderMessage: 'Fetching available resources...',
-        hideToastOnSuccess: true,
-        errorMessage: 'Failed to load resources. Please try again.',
-        showLoader: false // Don't show full page loader because we're using skeleton loaders
-      })
-        .then(response => {
-          try {
-            // Parse the response if it's a string
-            const data = typeof response === 'string' ? JSON.parse(response) : response;
-            console.log('Resources data loaded:', data);
-            
-            // Handle different response formats
-            if (Array.isArray(data)) {
-              resolve(data);
-            } else if (data && data.krooResourcesRooms) {
-              // Process resources data if it's in the nested format
-              const processedResources = data.krooResourcesRooms.map(resource => ({
-                id: resource.id,
-                name: resource.name,
-                image: resource.image || '/api/placeholder/400/260',
-                capacity: resource.capacity || 0,
-                status: resource.status || 'available',
-                location: resource.location || 'Not specified',
-                pricePerHour: resource.pricePerHour || 100
-              }));
+    return this.request('fetchData', {}, {
+      requestId: 'fetchResources',  // Custom ID for tracking
+      loaderTitle: 'Loading Resources',
+      loaderMessage: 'Fetching available resources...',
+      hideToastOnSuccess: true,
+      errorMessage: 'Failed to load resources. Please try again.',
+      showLoader: false // Don't show full page loader because we're using skeleton loaders
+    })
+      .then(response => {
+        try {
+          // Parse the response if it's a string
+          const data = typeof response === 'string' ? JSON.parse(response) : response;
+          console.log('Resources data loaded:', data);
+          
+          // Handle different response formats
+          if (Array.isArray(data)) {
+            return data;
+          } else if (data && data.krooResourcesRooms) {
+            // Process resources data if it's in the nested format
+            const processedResources = data.krooResourcesRooms.map(resource => ({
+              id: resource.id,
+              name: resource.name,
+              image: resource.image || '/api/placeholder/400/260',
+              capacity: resource.capacity || 0,
+              status: resource.status || 'available',
+              location: resource.location || 'Not specified',
+              pricePerHour: resource.pricePerHour || 100
+            }));
 
-              resources = processedResources;
-              console.log(resources)
-              // Resolve with processed data
-              resolve(processedResources);
-            } else {
-              throw new Error('Invalid data format');
-            }
-          } catch (error) {
-            console.error('Error processing resources data:', error);
-            
-            // Fall back to mock data in development
-            if (window.resources) {
-              console.warn('Falling back to mock resources data');
-              resolve(window.resources);
-            } else {
-              reject(error);
-            }
+            resources = processedResources;
+            console.log(resources);
+            // Resolve with processed data
+            return processedResources;
+          } else {
+            throw new Error('Invalid data format');
           }
-        })
-        .catch(error => {
+        } catch (error) {
+          console.error('Error processing resources data:', error);
+          
           // Fall back to mock data in development
           if (window.resources) {
-            console.warn('Falling back to mock resources data due to API error');
-            resolve(window.resources);
+            console.warn('Falling back to mock resources data');
+            return window.resources;
           } else {
-            reject(error);
+            throw error;
           }
-        });
-    });
+        }
+      })
+      .catch(error => {
+        // Fall back to mock data in development
+        if (window.resources) {
+          console.warn('Falling back to mock resources data due to API error');
+          return window.resources;
+        } else {
+          throw error;
+        }
+      });
   },
   
   /**
@@ -3807,46 +3866,34 @@ const API = {
    * @returns {Promise} Promise that resolves with booked slots
    */
   fetchBookedSlots: function(resourceId, date) {
-    return new Promise((resolve, reject) => {
-      this.request('fetchBookedSlots', { resourceId, date }, {
-        showLoader: false,
-        hideToastOnSuccess: true,
-        errorMessage: 'Failed to load booking data'
+    const requestId = `fetchBookedSlots_${resourceId}_${date}`;
+    
+    return this.request('fetchBookedSlots', { resourceId, date }, {
+      requestId: requestId,
+      showLoader: false,
+      hideToastOnSuccess: true,
+      errorMessage: 'Failed to load booking data'
+    })
+      .then(response => {
+        // Parse the response if it's a string
+        const data = typeof response === 'string' ? JSON.parse(response) : response;
+        return data;
       })
-        .then(response => {
-          // Parse the response if it's a string
-          const data = typeof response === 'string' ? JSON.parse(response) : response;
-          resolve(data);
-        })
-        .catch(error => {
-          console.error('Error fetching booked slots:', error);
-          
-          // Fall back to mock data in development
-          if (window.bookedSlots) {
-            console.warn('Falling back to mock booked slots data');
-            const fallbackSlots = window.bookedSlots.filter(slot => 
-              slot.resourceId === resourceId && 
-              slot.date === date
-            );
-            resolve(fallbackSlots);
-          } else {
-            reject(error);
-          }
-        });
-    });
-  },
-  
-  /**
-   * Create a new booking
-   * @param {object} bookingData - Booking data
-   * @returns {Promise} Promise that resolves with created booking
-   */
-  createBooking: function(bookingData) {
-    return this.request('createBooking', bookingData, {
-      loaderTitle: 'Creating Booking',
-      loaderMessage: 'Please wait while we confirm your booking...',
-      successMessage: 'Booking created successfully!'
-    });
+      .catch(error => {
+        console.error('Error fetching booked slots:', error);
+        
+        // Fall back to mock data in development
+        if (window.bookedSlots) {
+          console.warn('Falling back to mock booked slots data');
+          const fallbackSlots = window.bookedSlots.filter(slot => 
+            slot.resourceId === resourceId && 
+            slot.date === date
+          );
+          return fallbackSlots;
+        } else {
+          throw error;
+        }
+      });
   },
   
   /**
@@ -3854,7 +3901,6 @@ const API = {
    * @param {object} bookingData - Complete booking data with reference
    * @returns {Promise} Promise resolving to booking with ID and reference
    */
-
   addToBuffer: function(bookingData) {
     // Ensure booking has a reference number
     if (!bookingData.reference) {
@@ -3866,7 +3912,10 @@ const API = {
       bookingData.bufferTimestamp = Date.now();
     }
     
+    const requestId = `addBookingToBuffer_${bookingData.reference}`;
+    
     return this.request('addBookingToBuffer', bookingData, {
+      requestId: requestId,
       loaderTitle: 'Processing Booking',
       loaderMessage: 'Please wait while we confirm your reservation...',
       hideToastOnSuccess: true,
@@ -3875,9 +3924,9 @@ const API = {
   },
 
   /**
- * Add booking to database (second stage - don't wait for response)
- * @param {object} bookingData - Booking data from buffer
- */
+   * Add booking to database (second stage - don't wait for response)
+   * @param {object} bookingData - Booking data from buffer
+   */
   addToDatabase: function(bookingData) {
     // Add DB timestamp
     const dbBookingData = {
@@ -3885,27 +3934,42 @@ const API = {
       dbTimestamp: Date.now()
     };
     
-    // Don't wait for response, don't show loader
-    this.request('addBookingToDatabase', dbBookingData, {
+    const requestId = `addBookingToDatabase_${bookingData.reference}`;
+    
+    // Don't show loader but still prevent duplicate database operations
+    return this.request('addBookingToDatabase', dbBookingData, {
+      requestId: requestId,
       showLoader: false,
-      hideToastOnSuccess: true
+      hideToastOnSuccess: true,
+      preventDuplicateSubmission: true  // Prevent duplicates, but per booking
     })
       .then(response => {
         console.log('Booking added to database:', response);
+        return response;
       })
       .catch(error => {
         console.error('Error adding booking to database:', error);
         // Optionally implement retry logic here
+        throw error;
       });
   },
   
-
-  verifyInstapayPayment:function(file, bookingReference, expectedAmount, verificationOptions) {
+  /**
+   * Verify InstaPay payment
+   * @param {File} file - Screenshot file
+   * @param {string} bookingReference - Booking reference
+   * @param {number} expectedAmount - Expected payment amount
+   * @param {object} verificationOptions - Verification options
+   * @returns {Promise} Promise resolving to verification result
+   */
+  verifyInstapayPayment: function(file, bookingReference, expectedAmount, verificationOptions) {
     // Show loading on button (if calling from modal)
     const verifyButton = document.getElementById('verify-payment');
     if (verifyButton) {
       LoadingManager.showButtonLoader('#verify-payment');
     }
+    
+    const requestId = `verifyInstapayPayment_${bookingReference}`;
     
     return new Promise((resolve, reject) => {
       // Convert file to base64 first
@@ -3933,6 +3997,7 @@ const API = {
           
           // Use the existing request method
           this.request('verifyInstapayPayment', dataToSend, {
+            requestId: requestId,
             loaderTitle: 'Verifying Payment',
             loaderMessage: 'Please wait while we verify your payment...',
             hideToastOnSuccess: true,
@@ -3963,13 +4028,319 @@ const API = {
    * @returns {Promise} Promise that resolves with canceled booking
    */
   cancelBooking: function(bookingId) {
+    const requestId = `cancelBooking_${bookingId}`;
+    
     return this.request('cancelBooking', { bookingId }, {
+      requestId: requestId,
       loaderTitle: 'Canceling Booking',
       loaderMessage: 'Please wait while we process your cancellation...',
       successMessage: 'Booking canceled successfully!'
     });
   }
 };
+
+// const API = {
+//   /**
+//    * Core request method that handles all API calls to Google Apps Script
+//    * @param {string} functionName - Server-side function to call
+//    * @param {object} data - Optional data to send to the server
+//    * @param {object} options - Optional configuration
+//    * @returns {Promise} Promise that resolves with the response
+//    */
+//   request: function(functionName, data = {}, options = {}) {
+//     if(AppState.beginSubmission()){
+//       console.warn("App already submitting!")
+//     }
+//     const {
+//       showLoader = true,
+//       loaderMessage = 'Processing Request',
+//       loaderTitle = 'Please Wait',
+//       hideToastOnSuccess = false,
+//       successMessage = 'Operation completed successfully',
+//       errorMessage = 'Operation failed. Please try again.'
+//     } = options;
+    
+//     AppState.beginSubmission()
+
+//     return new Promise((resolve, reject) => {
+//       // Show loader if requested
+//       if (showLoader) {
+//         LoadingManager.showFullPageLoader(loaderTitle, loaderMessage);
+//       }
+      
+//       // Call the Google Apps Script function
+//       google.script.run
+//         .withSuccessHandler(function(response) {
+//           // Hide loader if shown
+//           if (showLoader) {
+//             LoadingManager.hideFullPageLoader();
+//           }
+          
+//           // Show success toast if needed
+//           if (!hideToastOnSuccess) {
+//             Toast.show('success', successMessage);
+//           }
+          
+//           AppState.endSubmission()
+
+//           // Resolve with response
+//           resolve(response);
+//         })
+//         .withFailureHandler(function(error) {
+//           console.error(`API Error (${functionName}):`, error);
+          
+//           // Hide loader if shown
+//           if (showLoader) {
+//             LoadingManager.hideFullPageLoader();
+//           }
+          
+//           // Show error toast
+//           Toast.show('error', errorMessage);
+
+//           AppState.endSubmission()
+          
+//           // Reject with error
+//           reject(error);
+//         })
+//         [functionName](data); // Call the specified function
+//     });
+//   },
+  
+//   /**
+//    * Fetch resources from the server
+//    * @returns {Promise} Promise that resolves with processed resources
+//    */
+//   fetchResources: function() {
+//     return new Promise((resolve, reject) => {
+//       this.request('fetchData', {}, {
+//         loaderTitle: 'Loading Resources',
+//         loaderMessage: 'Fetching available resources...',
+//         hideToastOnSuccess: true,
+//         errorMessage: 'Failed to load resources. Please try again.',
+//         showLoader: false // Don't show full page loader because we're using skeleton loaders
+//       })
+//         .then(response => {
+//           try {
+//             // Parse the response if it's a string
+//             const data = typeof response === 'string' ? JSON.parse(response) : response;
+//             console.log('Resources data loaded:', data);
+            
+//             // Handle different response formats
+//             if (Array.isArray(data)) {
+//               resolve(data);
+//             } else if (data && data.krooResourcesRooms) {
+//               // Process resources data if it's in the nested format
+//               const processedResources = data.krooResourcesRooms.map(resource => ({
+//                 id: resource.id,
+//                 name: resource.name,
+//                 image: resource.image || '/api/placeholder/400/260',
+//                 capacity: resource.capacity || 0,
+//                 status: resource.status || 'available',
+//                 location: resource.location || 'Not specified',
+//                 pricePerHour: resource.pricePerHour || 100
+//               }));
+
+//               resources = processedResources;
+//               console.log(resources)
+//               // Resolve with processed data
+//               resolve(processedResources);
+//             } else {
+//               throw new Error('Invalid data format');
+//             }
+//           } catch (error) {
+//             console.error('Error processing resources data:', error);
+            
+//             // Fall back to mock data in development
+//             if (window.resources) {
+//               console.warn('Falling back to mock resources data');
+//               resolve(window.resources);
+//             } else {
+//               reject(error);
+//             }
+//           }
+//         })
+//         .catch(error => {
+//           // Fall back to mock data in development
+//           if (window.resources) {
+//             console.warn('Falling back to mock resources data due to API error');
+//             resolve(window.resources);
+//           } else {
+//             reject(error);
+//           }
+//         });
+//     });
+//   },
+  
+//   /**
+//    * Fetch booked slots for a resource
+//    * @param {number} resourceId - Resource ID
+//    * @param {string} date - Date in YYYY-MM-DD format
+//    * @returns {Promise} Promise that resolves with booked slots
+//    */
+//   fetchBookedSlots: function(resourceId, date) {
+//     return new Promise((resolve, reject) => {
+//       this.request('fetchBookedSlots', { resourceId, date }, {
+//         showLoader: false,
+//         hideToastOnSuccess: true,
+//         errorMessage: 'Failed to load booking data'
+//       })
+//         .then(response => {
+//           // Parse the response if it's a string
+//           const data = typeof response === 'string' ? JSON.parse(response) : response;
+//           resolve(data);
+//         })
+//         .catch(error => {
+//           console.error('Error fetching booked slots:', error);
+          
+//           // Fall back to mock data in development
+//           if (window.bookedSlots) {
+//             console.warn('Falling back to mock booked slots data');
+//             const fallbackSlots = window.bookedSlots.filter(slot => 
+//               slot.resourceId === resourceId && 
+//               slot.date === date
+//             );
+//             resolve(fallbackSlots);
+//           } else {
+//             reject(error);
+//           }
+//         });
+//     });
+//   },
+  
+//   /**
+//    * Create a new booking
+//    * @param {object} bookingData - Booking data
+//    * @returns {Promise} Promise that resolves with created booking
+//    */
+//   createBooking: function(bookingData) {
+//     return this.request('createBooking', bookingData, {
+//       loaderTitle: 'Creating Booking',
+//       loaderMessage: 'Please wait while we confirm your booking...',
+//       successMessage: 'Booking created successfully!'
+//     });
+//   },
+  
+//   /**
+//    * Add booking to buffer (first stage - wait for response)
+//    * @param {object} bookingData - Complete booking data with reference
+//    * @returns {Promise} Promise resolving to booking with ID and reference
+//    */
+
+//   addToBuffer: function(bookingData) {
+//     // Ensure booking has a reference number
+//     if (!bookingData.reference) {
+//       bookingData.reference = Utils.generateBookingReference();
+//     }
+    
+//     // Add timestamp if not present
+//     if (!bookingData.bufferTimestamp) {
+//       bookingData.bufferTimestamp = Date.now();
+//     }
+    
+//     return this.request('addBookingToBuffer', bookingData, {
+//       loaderTitle: 'Processing Booking',
+//       loaderMessage: 'Please wait while we confirm your reservation...',
+//       hideToastOnSuccess: true,
+//       errorMessage: 'Could not process your booking. Please try again.'
+//     });
+//   },
+
+//   /**
+//  * Add booking to database (second stage - don't wait for response)
+//  * @param {object} bookingData - Booking data from buffer
+//  */
+//   addToDatabase: function(bookingData) {
+//     // Add DB timestamp
+//     const dbBookingData = {
+//       ...bookingData,
+//       dbTimestamp: Date.now()
+//     };
+    
+//     // Don't wait for response, don't show loader
+//     this.request('addBookingToDatabase', dbBookingData, {
+//       showLoader: false,
+//       hideToastOnSuccess: true
+//     })
+//       .then(response => {
+//         console.log('Booking added to database:', response);
+//       })
+//       .catch(error => {
+//         console.error('Error adding booking to database:', error);
+//         // Optionally implement retry logic here
+//       });
+//   },
+  
+
+//   verifyInstapayPayment:function(file, bookingReference, expectedAmount, verificationOptions) {
+//     // Show loading on button (if calling from modal)
+//     const verifyButton = document.getElementById('verify-payment');
+//     if (verifyButton) {
+//       LoadingManager.showButtonLoader('#verify-payment');
+//     }
+    
+//     return new Promise((resolve, reject) => {
+//       // Convert file to base64 first
+//       const reader = new FileReader();
+      
+//       reader.onload = (e) => {
+//         try {
+//           // Get the base64 data without the prefix
+//           const base64Data = e.target.result.split(',')[1];
+          
+//           // Create data object to send to the server
+//           const dataToSend = {
+//             fileContent: base64Data,
+//             fileName: file.name,
+//             fileType: file.type,
+//             fileSize: file.size,
+//             bookingReference: bookingReference,
+//             expectedAmount: expectedAmount,
+//             // Include all verification options
+//             ...verificationOptions
+//           };
+          
+//           console.log("Sending file:", file.name, "size:", file.size, "type:", file.type);
+//           console.log("With reference:", bookingReference, "expected amount:", expectedAmount);
+          
+//           // Use the existing request method
+//           this.request('verifyInstapayPayment', dataToSend, {
+//             loaderTitle: 'Verifying Payment',
+//             loaderMessage: 'Please wait while we verify your payment...',
+//             hideToastOnSuccess: true,
+//             errorMessage: 'Could not verify payment. Please try again.'
+//           })
+//           .then(resolve)
+//           .catch(reject);
+//         } 
+//         catch (error) {
+//           console.error('Error preparing file data:', error);
+//           reject(error);
+//         }
+//       };
+      
+//       reader.onerror = (error) => {
+//         console.error('Error reading file:', error);
+//         reject(error);
+//       };
+      
+//       // Start reading the file as data URL
+//       reader.readAsDataURL(file);
+//     });
+//   },
+  
+//   /**
+//    * Cancel a booking
+//    * @param {number} bookingId - ID of booking to cancel
+//    * @returns {Promise} Promise that resolves with canceled booking
+//    */
+//   cancelBooking: function(bookingId) {
+//     return this.request('cancelBooking', { bookingId }, {
+//       loaderTitle: 'Canceling Booking',
+//       loaderMessage: 'Please wait while we process your cancellation...',
+//       successMessage: 'Booking canceled successfully!'
+//     });
+//   }
+// };
 
 // ===== EVENT HANDLERS =====
 // Setup global event listeners

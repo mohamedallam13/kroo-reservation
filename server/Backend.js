@@ -305,6 +305,7 @@ function addBookingToBuffer(booking) {
 
 function addBookingToDatabase(booking) {
   booking = booking || testBookingD
+  console.log(booking)
   return KROO_BOOKING_APP.addBookingToDB(booking)
 }
 

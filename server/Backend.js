@@ -88,8 +88,8 @@
     }
     // Create new bookings
     const bookingObj = new BookingObj(booking)
-    const resrveWriteArr = createWriteArr([bookingObj], reservationsSheetObj)
-    writeToSheet(resrveWriteArr, reservationsSheetObj)
+    const reserveWriteArr = createWriteArr([bookingObj], reservationsSheetObj)
+    writeToSheet(reserveWriteArr, reservationsSheetObj)
     if (booking.userDetails.isNewUser) {
       const memberObj = new MemberObj(booking)
       const memberWriteArr = createWriteArr([memberObj], newMembersSheetObj)
@@ -129,8 +129,9 @@
       };
     }
   }
-  function sendConfirmationEmail() {
 
+  function sendConfirmationEmail(booking) {
+    EmailModule.sendConfirmationEmail(booking)
   }
 
   function addToCalendar() {

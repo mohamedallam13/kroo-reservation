@@ -291,6 +291,8 @@
         discount: this.userDiscount,
         isAdmin: this.isAdmin
       });
+
+      setupDiscountBanner();
     },
 
     // Check if user email is provided
@@ -1148,183 +1150,426 @@
     }
   }
 
-  // ===== IMAGE CAROUSEL MODULE =====
-  const ImageCarousel = {
-    currentIndex: 0,
-    images: [],
-    resourceName: '',
+// ===== IMAGE CAROUSEL MODULE WITH SWIPE SUPPORT =====
+const ImageCarousel = {
+  currentIndex: 0,
+  images: [],
+  resourceName: '',
+  // Swipe properties
+  startX: 0,
+  currentX: 0,
+  isDragging: false,
+  threshold: 50, // Minimum distance for swipe
 
-    /**
-     * Open carousel with resource images
-     * @param {Object} resource - Resource object with picsCarousel array
-     */
-    open: function (resource) {
-      if (!resource.carouselImages || resource.carouselImages.length === 0) {
-        console.warn('No carousel images found for resource');
-        return;
+  /**
+   * Open carousel with resource images
+   * @param {Object} resource - Resource object with carouselImages array
+   */
+  open: function (resource) {
+    if (!resource.carouselImages || resource.carouselImages.length === 0) {
+      console.warn('No carousel images found for resource');
+      return;
+    }
+
+    this.images = resource.carouselImages;
+    this.resourceName = resource.name;
+    this.currentIndex = 0;
+
+    // Update modal title
+    const carouselTitle = DOM.byId('carousel-title');
+    if (carouselTitle) {
+      carouselTitle.textContent = `${this.resourceName} - Images`;
+    }
+
+    // Generate images
+    this.generateImages();
+
+    // Generate indicators
+    this.generateIndicators();
+
+    // Setup swipe listeners
+    this.setupSwipeListeners();
+
+    // Update display
+    this.updateDisplay();
+
+    // Show modal
+    const modal = DOM.byId('image-carousel-modal');
+    if (modal) {
+      DOM.addClass(modal, 'active');
+      document.body.style.overflow = 'hidden';
+    }
+  },
+
+  /**
+   * Close carousel modal
+   */
+  hide: function () {
+    const modal = DOM.byId('image-carousel-modal');
+    if (modal) {
+      DOM.removeClass(modal, 'active');
+      document.body.style.overflow = '';
+    }
+    
+    // Remove swipe listeners
+    this.removeSwipeListeners();
+  },
+
+  /**
+   * Generate image elements
+   */
+  generateImages: function () {
+    const container = DOM.byId('carousel-images');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    this.images.forEach((imageUrl, index) => {
+      const img = document.createElement('img');
+      img.className = 'carousel-image';
+      img.src = imageUrl; // Use the URL as-is
+      img.alt = `${this.resourceName} - Image ${index + 1}`;
+      img.loading = index === 0 ? 'eager' : 'lazy';
+      img.draggable = false; // Prevent default image dragging
+
+      container.appendChild(img);
+    });
+  },
+
+  /**
+   * Generate indicator dots
+   */
+  generateIndicators: function () {
+    const container = DOM.byId('carousel-indicators');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    this.images.forEach((_, index) => {
+      const indicator = document.createElement('div');
+      indicator.className = 'carousel-indicator';
+      if (index === 0) {
+        DOM.addClass(indicator, 'active');
       }
 
-      this.images = resource.carouselImages;
-      this.resourceName = resource.name;
-      this.currentIndex = 0;
-
-      // Update modal title
-      const carouselTitle = DOM.byId('carousel-title');
-      if (carouselTitle) {
-        carouselTitle.textContent = `${this.resourceName} - Images`;
-      }
-
-      // Generate images
-      this.generateImages();
-
-      // Generate indicators
-      this.generateIndicators();
-
-      // Update display
-      this.updateDisplay();
-
-      // Show modal
-      const modal = DOM.byId('image-carousel-modal');
-      if (modal) {
-        DOM.addClass(modal, 'active');
-        document.body.style.overflow = 'hidden';
-      }
-    },
-
-    /**
-     * Close carousel modal
-     */
-    hide: function () {
-      const modal = DOM.byId('image-carousel-modal');
-      if (modal) {
-        DOM.removeClass(modal, 'active');
-        document.body.style.overflow = '';
-      }
-    },
-
-    /**
-     * Generate image elements
-     */
-    generateImages: function () {
-      const container = DOM.byId('carousel-images');
-      if (!container) return;
-
-      container.innerHTML = '';
-
-      this.images.forEach((imageUrl, index) => {
-        const img = document.createElement('img');
-        img.className = 'carousel-image';
-        img.src = imageUrl; // Use the URL as-is
-        img.alt = `${this.resourceName} - Image ${index + 1}`;
-        img.loading = index === 0 ? 'eager' : 'lazy';
-
-        container.appendChild(img);
-      });
-    },
-
-    /**
-     * Generate indicator dots
-     */
-    generateIndicators: function () {
-      const container = DOM.byId('carousel-indicators');
-      if (!container) return;
-
-      container.innerHTML = '';
-
-      this.images.forEach((_, index) => {
-        const indicator = document.createElement('div');
-        indicator.className = 'carousel-indicator';
-        if (index === 0) {
-          DOM.addClass(indicator, 'active');
-        }
-
-        indicator.addEventListener('click', () => {
-          this.goToSlide(index);
-        });
-
-        container.appendChild(indicator);
-      });
-    },
-
-    /**
-     * Navigate to specific slide
-     * @param {number} index - Target slide index
-     */
-    goToSlide: function (index) {
-      if (index < 0 || index >= this.images.length) return;
-
-      this.currentIndex = index;
-      this.updateDisplay();
-    },
-
-    /**
-     * Navigate to previous slide
-     */
-    prevSlide: function () {
-      const newIndex = this.currentIndex > 0 ? this.currentIndex - 1 : this.images.length - 1;
-      this.goToSlide(newIndex);
-    },
-
-    /**
-     * Navigate to next slide
-     */
-    nextSlide: function () {
-      const newIndex = this.currentIndex < this.images.length - 1 ? this.currentIndex + 1 : 0;
-      this.goToSlide(newIndex);
-    },
-
-    /**
-     * Update carousel display based on current index
-     */
-    updateDisplay: function () {
-      // Update images transform
-      const imagesContainer = DOM.byId('carousel-images');
-      if (imagesContainer) {
-        const translateX = -this.currentIndex * 100;
-        imagesContainer.style.transform = `translateX(${translateX}%)`;
-      }
-
-      // Update indicators
-      const indicators = document.querySelectorAll('.carousel-indicator');
-      indicators.forEach((indicator, index) => {
-        if (index === this.currentIndex) {
-          DOM.addClass(indicator, 'active');
-        } else {
-          DOM.removeClass(indicator, 'active');
-        }
+      indicator.addEventListener('click', () => {
+        this.goToSlide(index);
       });
 
-      // Update counter
-      const counter = DOM.byId('carousel-counter');
-      if (counter) {
-        counter.textContent = `${this.currentIndex + 1} / ${this.images.length}`;
+      container.appendChild(indicator);
+    });
+  },
+
+  /**
+   * Navigate to specific slide
+   * @param {number} index - Target slide index
+   */
+  goToSlide: function (index) {
+    if (index < 0 || index >= this.images.length) return;
+
+    this.currentIndex = index;
+    this.updateDisplay();
+  },
+
+  /**
+   * Navigate to previous slide
+   */
+  prevSlide: function () {
+    const newIndex = this.currentIndex > 0 ? this.currentIndex - 1 : this.images.length - 1;
+    this.goToSlide(newIndex);
+  },
+
+  /**
+   * Navigate to next slide
+   */
+  nextSlide: function () {
+    const newIndex = this.currentIndex < this.images.length - 1 ? this.currentIndex + 1 : 0;
+    this.goToSlide(newIndex);
+  },
+
+  /**
+   * Update carousel display based on current index
+   */
+  updateDisplay: function () {
+    // Update images transform
+    const imagesContainer = DOM.byId('carousel-images');
+    if (imagesContainer) {
+      const translateX = -this.currentIndex * 100;
+      imagesContainer.style.transform = `translateX(${translateX}%)`;
+    }
+
+    // Update indicators
+    const indicators = document.querySelectorAll('.carousel-indicator');
+    indicators.forEach((indicator, index) => {
+      if (index === this.currentIndex) {
+        DOM.addClass(indicator, 'active');
+      } else {
+        DOM.removeClass(indicator, 'active');
       }
-    },
+    });
 
-    /**
-     * Handle keyboard navigation
-     * @param {KeyboardEvent} event - Keyboard event
-     */
-    handleKeyboard: function (event) {
-      const modal = DOM.byId('image-carousel-modal');
-      if (!modal || !modal.classList.contains('active')) return;
+    // Update counter
+    const counter = DOM.byId('carousel-counter');
+    if (counter) {
+      counter.textContent = `${this.currentIndex + 1} / ${this.images.length}`;
+    }
+  },
 
-      switch (event.key) {
-        case 'ArrowLeft':
-          event.preventDefault();
-          this.prevSlide();
-          break;
-        case 'ArrowRight':
-          event.preventDefault();
-          this.nextSlide();
-          break;
-        case 'Escape':
-          event.preventDefault();
-          this.hide();
-          break;
+  /**
+   * Setup swipe/touch listeners
+   */
+  setupSwipeListeners: function () {
+    const container = DOM.byId('carousel-images');
+    if (!container) return;
+
+    // Touch events
+    container.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: true });
+    container.addEventListener('touchmove', this.handleTouchMove.bind(this), { passive: false });
+    container.addEventListener('touchend', this.handleTouchEnd.bind(this), { passive: true });
+
+    // Mouse events for desktop
+    container.addEventListener('mousedown', this.handleMouseDown.bind(this));
+    container.addEventListener('mousemove', this.handleMouseMove.bind(this));
+    container.addEventListener('mouseup', this.handleMouseUp.bind(this));
+    container.addEventListener('mouseleave', this.handleMouseUp.bind(this));
+  },
+
+  /**
+   * Remove swipe listeners
+   */
+  removeSwipeListeners: function () {
+    const container = DOM.byId('carousel-images');
+    if (!container) return;
+
+    container.removeEventListener('touchstart', this.handleTouchStart.bind(this));
+    container.removeEventListener('touchmove', this.handleTouchMove.bind(this));
+    container.removeEventListener('touchend', this.handleTouchEnd.bind(this));
+    container.removeEventListener('mousedown', this.handleMouseDown.bind(this));
+    container.removeEventListener('mousemove', this.handleMouseMove.bind(this));
+    container.removeEventListener('mouseup', this.handleMouseUp.bind(this));
+    container.removeEventListener('mouseleave', this.handleMouseUp.bind(this));
+  },
+
+  /**
+   * Touch start handler
+   */
+  handleTouchStart: function (e) {
+    this.startX = e.touches[0].clientX;
+    this.isDragging = true;
+  },
+
+  /**
+   * Touch move handler
+   */
+  handleTouchMove: function (e) {
+    if (!this.isDragging) return;
+    
+    e.preventDefault(); // Prevent scrolling
+    this.currentX = e.touches[0].clientX;
+  },
+
+  /**
+   * Touch end handler
+   */
+  handleTouchEnd: function (e) {
+    if (!this.isDragging) return;
+    
+    this.isDragging = false;
+    this.handleSwipe();
+  },
+
+  /**
+   * Mouse down handler
+   */
+  handleMouseDown: function (e) {
+    this.startX = e.clientX;
+    this.isDragging = true;
+    e.preventDefault(); // Prevent text selection
+  },
+
+  /**
+   * Mouse move handler
+   */
+  handleMouseMove: function (e) {
+    if (!this.isDragging) return;
+    
+    this.currentX = e.clientX;
+  },
+
+  /**
+   * Mouse up handler
+   */
+  handleMouseUp: function (e) {
+    if (!this.isDragging) return;
+    
+    this.isDragging = false;
+    this.handleSwipe();
+  },
+
+  /**
+   * Handle swipe logic
+   */
+  handleSwipe: function () {
+    const deltaX = this.currentX - this.startX;
+    
+    if (Math.abs(deltaX) > this.threshold) {
+      if (deltaX > 0) {
+        // Swiped right - go to previous slide
+        this.prevSlide();
+      } else {
+        // Swiped left - go to next slide
+        this.nextSlide();
       }
     }
-  };
+    
+    // Reset values
+    this.startX = 0;
+    this.currentX = 0;
+  },
+
+  /**
+   * Handle keyboard navigation
+   * @param {KeyboardEvent} event - Keyboard event
+   */
+  handleKeyboard: function (event) {
+    const modal = DOM.byId('image-carousel-modal');
+    if (!modal || !modal.classList.contains('active')) return;
+
+    switch (event.key) {
+      case 'ArrowLeft':
+        event.preventDefault();
+        this.prevSlide();
+        break;
+      case 'ArrowRight':
+        event.preventDefault();
+        this.nextSlide();
+        break;
+      case 'Escape':
+        event.preventDefault();
+        this.hide();
+        break;
+    }
+  }
+};
+
+// ===== SMOOTH DISCOUNT BANNER MODULE =====
+const DiscountBanner = {
+  hideTimeout: null,
+
+  /**
+   * Show discount banner with confetti
+   * @param {number} discountPercent - Discount percentage (e.g., 10 for 10%)
+   */
+  show: function(discountPercent) {
+    const banner = DOM.byId('discount-banner');
+    const discountAmount = DOM.byId('discount-amount');
+    
+    if (!banner || !discountAmount) return;
+    
+    // Clear any existing hide timeout
+    if (this.hideTimeout) {
+      clearTimeout(this.hideTimeout);
+      this.hideTimeout = null;
+    }
+    
+    // Update discount percentage
+    discountAmount.textContent = `${discountPercent}%`;
+    
+    // Remove hiding class if it exists
+    DOM.removeClass(banner, 'hiding');
+    
+    // Show banner with smooth animation
+    DOM.addClass(banner, 'show');
+    document.body.classList.add('has-discount-banner');
+    
+    // Trigger confetti
+    this.createConfetti(banner);
+    
+    // Auto-hide after 8 seconds
+    this.hideTimeout = setTimeout(() => {
+      this.hide();
+    }, 8000);
+  },
+
+  /**
+   * Hide discount banner smoothly
+   */
+  hide: function() {
+    const banner = DOM.byId('discount-banner');
+    if (!banner) return;
+    
+    // Clear timeout if called manually
+    if (this.hideTimeout) {
+      clearTimeout(this.hideTimeout);
+      this.hideTimeout = null;
+    }
+    
+    // Add hiding class for smooth exit animation
+    DOM.addClass(banner, 'hiding');
+    DOM.removeClass(banner, 'show');
+    
+    // Remove from body class and completely hide after animation
+    setTimeout(() => {
+      document.body.classList.remove('has-discount-banner');
+      DOM.removeClass(banner, 'hiding');
+    }, 800); // Match the CSS transition duration
+  },
+
+  /**
+   * Create confetti animation
+   * @param {HTMLElement} container - Container element for confetti
+   */
+  createConfetti: function(container) {
+    const confettiCount = 30;
+    
+    for (let i = 0; i < confettiCount; i++) {
+      setTimeout(() => {
+        const confetti = document.createElement('div');
+        confetti.className = 'confetti';
+        
+        // Random horizontal position
+        confetti.style.left = Math.random() * 100 + '%';
+        
+        // Random animation delay
+        confetti.style.animationDelay = Math.random() * 2 + 's';
+        
+        // Random animation duration
+        confetti.style.animationDuration = (Math.random() * 2 + 2) + 's';
+        
+        container.appendChild(confetti);
+        
+        // Remove confetti after animation
+        setTimeout(() => {
+          if (confetti.parentNode) {
+            confetti.parentNode.removeChild(confetti);
+          }
+        }, 4000);
+      }, i * 100); // Stagger the confetti creation
+    }
+  },
+
+  /**
+   * Check user discount and show banner if applicable
+   */
+  checkAndShow: function() {
+    // Check if user has a discount
+    if (AppState.userDiscount && AppState.userDiscount > 0) {
+      console.log(`User has ${AppState.userDiscount}% discount - showing banner`);
+      this.show(AppState.userDiscount);
+    }
+  }
+};
+
+// Add this to your existing setupWelcomeBanner function or create a new initialization function
+function setupDiscountBanner() {
+  // Check for discount after user is initialized
+  if (AppState.userDiscount && AppState.userDiscount > 0) {
+    // Small delay to let the page load first
+    setTimeout(() => {
+      DiscountBanner.checkAndShow();
+    }, 1000);
+  }
+}
 
   // ===== LOADING SCREENS & INDICATORS =====
 
@@ -5538,6 +5783,8 @@
         }
       });
     }
+    // KEYBOARD NAVIGATION - This is the important one for arrow keys
+    document.addEventListener('keydown', ImageCarousel.handleKeyboard.bind(ImageCarousel));
   };
 
   // ===== INITIALIZATION =====

@@ -80,6 +80,126 @@
     to { opacity: 1; }
   }
   
+  /* ===== SMOOTH DISCOUNT BANNER ===== */
+  .discount-banner {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: white;
+    padding: 12px 16px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    border-bottom: 1px solid #f59e0b;
+    position: sticky;
+    top: 0;
+    z-index: 15;
+    
+    /* Smooth transitions */
+    transform: translateY(-100%);
+    opacity: 0;
+    transition: all 0.5s ease-out;
+    max-height: 0;
+  }
+  
+  .discount-banner.show {
+    transform: translateY(0);
+    opacity: 1;
+    max-height: 100px; /* Adjust based on your banner height */
+  }
+  
+  .discount-banner.hiding {
+    transform: translateY(-100%);
+    opacity: 0;
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    transition: all 0.8s ease-in-out;
+  }
+  
+  .discount-banner-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    position: relative;
+    z-index: 2;
+  }
+  
+  .discount-icon {
+    font-size: 1.2rem;
+    animation: bounce 2s infinite;
+  }
+  
+  .discount-text {
+    font-weight: 600;
+    font-size: 1rem;
+  }
+  
+  .discount-percentage {
+    background-color: rgba(255, 255, 255, 0.2);
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: 700;
+    margin: 0 4px;
+  }
+  
+  /* Confetti animation */
+  .confetti {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    background-color: #fff;
+    animation: confetti-fall 3s linear infinite;
+    pointer-events: none;
+  }
+  
+  .confetti:nth-child(odd) {
+    background-color: #fbbf24;
+    border-radius: 50%;
+  }
+  
+  .confetti:nth-child(even) {
+    background-color: #34d399;
+    transform: rotate(45deg);
+  }
+  
+  .confetti:nth-child(3n) {
+    background-color: #60a5fa;
+    border-radius: 50%;
+  }
+  
+  .confetti:nth-child(4n) {
+    background-color: #f87171;
+  }
+  
+  /* Animations */
+  @keyframes bounce {
+    0%, 20%, 50%, 80%, 100% {
+      transform: translateY(0);
+    }
+    40% {
+      transform: translateY(-8px);
+    }
+    60% {
+      transform: translateY(-4px);
+    }
+  }
+  
+  @keyframes confetti-fall {
+    0% {
+      transform: translateY(-100vh) rotate(0deg);
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(100vh) rotate(720deg);
+      opacity: 0;
+    }
+  }
+  
+  /* Adjust header when banner is visible */
+  body.has-discount-banner header {
+    position: relative;
+  }
+  
   /* ===== LAYOUT ===== */
   .container {
     max-width: 1200px;
@@ -472,21 +592,45 @@
     position: absolute;
     top: var(--space-3);
     right: var(--space-3);
-    padding: 0.25rem var(--space-3);
+    padding: 0.25rem var(--space-3); /* Back to original smaller size */
     border-radius: var(--radius-full);
     font-size: 0.75rem;
-    font-weight: 500;
-    
+    font-weight: 500; /* Not too bold */
+    text-transform: capitalize; /* Less aggressive than uppercase */
+    backdrop-filter: blur(4px); /* Subtle blur */
+    z-index: 3;
   }
   
   .status-badge.available {
-    background-color: rgba(76, 175, 80, 0.3);
-    color: #4CAF50;
+    background-color: rgba(16, 185, 129, 0.85); /* Slightly more opaque than original */
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 
+      0 2px 4px rgba(16, 185, 129, 0.2), /* Subtle green glow */
+      0 1px 2px rgba(0, 0, 0, 0.1); /* Small shadow for depth */
   }
   
-  .status-badge.maintenance {
-    background-color: rgba(244, 67, 54, 0.3);
-    color: var(--color-danger);
+  .status-badge.maintenance,
+  .status-badge.unavailable {
+    background-color: rgba(239, 68, 68, 0.85); /* Slightly more opaque than original */
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 
+      0 2px 4px rgba(239, 68, 68, 0.2), /* Subtle red glow */
+      0 1px 2px rgba(0, 0, 0, 0.1); /* Small shadow for depth */
+  }
+  
+  /* Alternative cleaner approach - if you prefer solid colors */
+  .status-badge.clean-available {
+    background-color: #059669; /* Solid green */
+    color: white;
+    border: none;
+  }
+  
+  .status-badge.clean-maintenance {
+    background-color: #dc2626; /* Solid red */
+    color: white;
+    border: none;
   }
   
   .card-content {

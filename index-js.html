@@ -2549,6 +2549,8 @@
     },
 
     handleFileUpload: (event) => {
+      // First clear any existing preview
+      clearFilePreview();
       const file = event.target.files[0];
       if (!file) return;
 
@@ -2597,6 +2599,7 @@
       }
     },
 
+    // Updates to BookingModal.verifyPayment function
     verifyPayment: () => {
       if (!AppState.uploadedFile) {
         Toast.show('error', 'Please upload a payment screenshot');
@@ -2631,9 +2634,14 @@
       // Get payment reference
       const paymentReference = AppState.getPaymentReference();
 
-      // Get the expected amount
-      const expectedAmount = AppState.selectedTimeSlot ?
-        AppState.selectedTimeSlot.finalPrice || AppState.selectedTimeSlot.price : 0;
+      // Get the expected amount - KEY CHANGE HERE
+      // If we're verifying a second payment for a remaining amount, use that instead
+      const expectedAmount = AppState.expectedRemainingAmount ||
+        (AppState.selectedTimeSlot ?
+          AppState.selectedTimeSlot.finalPrice || AppState.selectedTimeSlot.price : 0);
+
+      console.log('Verifying payment with expected amount:', expectedAmount);
+      console.log('Remaining amount in state:', AppState.expectedRemainingAmount);
 
       // Verification options
       const verificationOptions = {
@@ -2645,60 +2653,114 @@
       // Verify the payment
       API.verifyInstapayPayment(AppState.uploadedFile, paymentReference, expectedAmount, verificationOptions)
         .then(response => {
-          // Parse response if needed
-          let parsedResponse;
+          let parsedComponents;
+
           try {
-            parsedResponse = typeof response === 'string' ? JSON.parse(response) : response;
+            // First, parse the response if it's still a string
+            const initialParsed = typeof response === 'string' ? JSON.parse(response) : response;
+
+            // Now, the response itself is a stringified JSON object containing the three components
+            if (typeof initialParsed === 'string') {
+              parsedComponents = JSON.parse(initialParsed);
+            } else if (initialParsed && typeof initialParsed === 'object') {
+              // Already an object, might be directly the components or wrapped in a property
+              if (initialParsed.ocrResult && initialParsed.verificationResult) {
+                // It's the direct components object
+                parsedComponents = initialParsed;
+              } else if (initialParsed.result && typeof initialParsed.result === 'string') {
+                // It might be wrapped in a result property as a string
+                parsedComponents = JSON.parse(initialParsed.result);
+              } else {
+                // As a last resort, try to find the components
+                parsedComponents = {
+                  ocrResult: initialParsed.ocrResult || initialParsed.result?.ocrResult || {},
+                  verificationResult: initialParsed.verificationResult || initialParsed.result?.verificationResult || {},
+                  decision: initialParsed.decision || initialParsed.result?.decision || {}
+                };
+              }
+            } else {
+              throw new Error('Unexpected response format');
+            }
+
+            console.log('Parsed components:', parsedComponents);
           } catch (error) {
-            throw new Error('This doesn\'t appear to be a valid Instapay receipt. Please try uploading a clear screenshot of your payment.');
+            console.error('Error parsing components:', error, 'Raw response:', response);
+            throw new Error('Failed to process the verification response. Please try again.');
           }
 
-          // Check if we have a valid structure with success flag
-          if (parsedResponse === null || parsedResponse === undefined) {
-            throw new Error('This doesn\'t appear to be a valid Instapay receipt. Please try uploading a clear screenshot of your payment.');
+          // Extract the three objects from the parsed components
+          const { ocrResult, verificationResult, decision } = parsedComponents;
+
+          console.log('OCR Result:', ocrResult);
+          console.log('Verification Result:', verificationResult);
+          console.log('Decision:', decision);
+
+          // Check if we have the necessary objects
+          if (!ocrResult || !verificationResult) {
+            throw new Error('Incomplete verification data returned from server.');
           }
-
-          // Check if there's an error message from server
-          if (!parsedResponse.success) {
-            const errorMsg = parsedResponse.error && parsedResponse.error.message ?
-              parsedResponse.error.message :
-              'This doesn\'t appear to be a valid Instapay receipt. Please try uploading a clear screenshot of your payment.';
-            throw new Error(errorMsg);
-          }
-
-          // Check if we have the right structure
-          if (!parsedResponse.result || !parsedResponse.result.verification) {
-            throw new Error('This doesn\'t appear to be a valid Instapay receipt. Please try uploading a clear screenshot of your payment.');
-          }
-
-          const verificationResult = parsedResponse.result.verification;
-          const ocrResult = parsedResponse.result.ocrResult;
-
-          console.log(verificationResult, ocrResult)
 
           // Store verification details for later use
           AppState.verificationResult = {
-            fileUrl: parsedResponse.fileUrl || '',
+            fileUrl: parsedComponents.fileUrl || '',
             verified: verificationResult.isLegitimate && verificationResult.isRightAmount,
-            confidence: ocrResult.confidence || 'Low',
-            message: getVerificationMessage(verificationResult),
-            remainder: verificationResult.remainder,
-            amountStatus: verificationResult.amountStatus,
-            detailedResult: parsedResponse.result,
+            confidence: ocrResult.confidence?.amount
+              ? `${(ocrResult.confidence.amount * 100).toFixed(1)}%`
+              : 'Low',
+            message: decision?.message || getVerificationMessage(verificationResult),
+            remainder: verificationResult.remainder || 0,
+            amountStatus: verificationResult.amountStatus || 'unknown',
+            detailedResult: parsedComponents,
+            decisionCode: decision?.primaryCode || null,
+            decision: decision?.decision || null,
             timestamp: new Date().toISOString()
           };
 
-          console.log(AppState.verificationResult)
+          console.log('Stored verification result:', AppState.verificationResult);
 
           // Hide button loader
           LoadingManager.hideButtonLoader('#verify-payment');
 
-          // Update verification status UI based on result
-          updateVerificationUI(verificationResult, ocrResult);
+          // IMPORTANT ADDITION: If we're checking for a remaining amount and it matches
+          // then we need to adjust how we handle the workflow
+          if (AppState.expectedRemainingAmount &&
+            (decision?.decision === 'APPROVED' || verificationResult.isRightAmount)) {
+            console.log('Remaining amount payment verified!');
+
+            // Calculate the new total paid amount (original partial + this payment)
+            const originalPartialAmount = AppState.partialPaymentAmount || 0;
+            const thisPaymentAmount = parseFloat(ocrResult.receipt?.data?.amount || 0);
+            const totalPaidNow = originalPartialAmount + thisPaymentAmount;
+
+            console.log('Original partial amount:', originalPartialAmount);
+            console.log('This payment amount:', thisPaymentAmount);
+            console.log('Total paid now:', totalPaidNow);
+
+            // Clear the remaining amount flag since it's now paid
+            AppState.expectedRemainingAmount = 0;
+
+            // Update the total amount in the AppState
+            AppState.partialPaymentAmount = totalPaidNow;
+            AppState.remainingAmount = 0;
+
+            // Update the booking details
+            if (AppState.selectedTimeSlot) {
+              AppState.selectedTimeSlot.finalPrice = totalPaidNow;
+              AppState.selectedTimeSlot.isPartialPayment = false;
+            }
+
+            // Show success for complete payment and proceed with booking
+            showCompletePaymentSuccess(totalPaidNow);
+            return;
+          }
+
+          // Update verification status UI based on result (standard flow)
+          updateVerificationUI(verificationResult, ocrResult, decision);
 
           // For different result types, handle accordingly
-          if (verificationResult.isLegitimate &&
-            (verificationResult.isRightAmount || verificationResult.amountStatus === 'more')) {
+          if (decision?.decision === 'APPROVED' ||
+            (verificationResult.isLegitimate &&
+              (verificationResult.isRightAmount || verificationResult.amountStatus === 'more'))) {
 
             // Show confirmation button
             const confirmationAction = DOM.byId('confirmation-action');
@@ -2715,9 +2777,13 @@
             // Process the booking
             BookingModal.handleVerifiedInstapayPayment();
           }
-          else if (verificationResult.amountStatus === 'less') {
-            // Setup partial payment button
-            setupPartialPaymentButton();
+          else if (decision?.decision === 'PARTIAL' || verificationResult.amountStatus === 'less') {
+            // Get the parsed amount from the receipt
+            const paidAmount = parseFloat(ocrResult.receipt?.data?.amount || 0);
+            const remainingAmount = Math.abs(verificationResult.remainder || 0);
+
+            // Setup partial payment button with the actual amounts from the receipt
+            setupPartialPaymentButton(paidAmount, remainingAmount);
           }
         })
         .catch(error => {
@@ -2825,11 +2891,32 @@
       }, 1500);
     },
 
-    handleVerifiedInstapayPayment: () => {
-      // This function is called when InstaPay verification succeeds
+    handleVerifiedInstapayPayment: (isPartial = false) => {
+      // Add attributes to indicate this is a partial payment if applicable
+      if (isPartial) {
+        // Update the booking details to reflect partial payment
+        AppState.selectedTimeSlot.finalPrice = AppState.partialPaymentAmount || AppState.selectedTimeSlot.finalPrice;
+        AppState.selectedTimeSlot.isPartialPayment = true;
+        AppState.selectedTimeSlot.remainingAmount = AppState.remainingAmount || 0;
+
+        // Show a note to the user about partial payment
+        Toast.show('info', `Processing with partial payment of EGP ${AppState.partialPaymentAmount.toFixed(2)}`);
+      }
 
       // Process the booking (verification result already in AppState)
       BookingModal.processBooking()
+        .then(result => {
+          console.log('InstaPay booking processed successfully:', result);
+
+          // If this was a partial payment, show special confirmation
+          if (isPartial) {
+            // Show special partial payment success message
+            showPartialPaymentSuccess(
+              AppState.partialPaymentAmount,
+              AppState.remainingAmount
+            );
+          }
+        })
         .catch(error => {
           console.error('InstaPay booking failed after verification:', error);
           // Error handling already done in processBooking
@@ -2906,9 +2993,10 @@
             // Show success message
             Toast.show('success', 'Your booking has been confirmed!');
 
-            // Hide modal after success
+            // NEW STEP: Show the booking receipt instead of hiding the modal
             setTimeout(() => {
-              BookingModal.hide();
+              // Show receipt with booking data
+              showReservationReceipt(finalBookingRequest);
             }, 1000);
 
             return result;
@@ -2927,6 +3015,609 @@
   }
 
   ///////////////// BOOKING MODAL ENDS HERE, BELOW IS A HELPER FUNCTION FOR IT
+
+  /**
+ * Clear the file preview thumbnail 
+ * This should be called when clicking the upload button in the complete payment instructions
+ */
+  function clearFilePreview() {
+    const filePreview = DOM.byId('file-preview');
+    const uploadInstructions = DOM.byId('upload-instructions');
+    const previewImage = DOM.byId('preview-image');
+
+    if (filePreview) {
+      DOM.hide(filePreview);
+      // Also clear the image source to fully remove the previous image
+      if (previewImage) {
+        previewImage.src = '';
+      }
+    }
+
+    if (uploadInstructions) {
+      DOM.show(uploadInstructions);
+    }
+
+    // Reset the file input value
+    const fileInput = DOM.byId('payment-screenshot');
+    if (fileInput) {
+      fileInput.value = '';
+    }
+
+    // Reset the uploaded file in AppState
+    AppState.uploadedFile = null;
+  }
+
+  /**
+   * Show partial payment success message
+   * @param {number} paidAmount - Amount already paid
+   * @param {number} remainingAmount - Amount still owed
+   */
+  function showPartialPaymentSuccess(paidAmount, remainingAmount) {
+    // Get the verification status container
+    const verificationStatus = DOM.byId('verification-status');
+    if (!verificationStatus) return;
+
+    // Fall back to AppState values if not provided
+    const paid = paidAmount || AppState.partialPaymentAmount || 0;
+    const remaining = remainingAmount || AppState.remainingAmount || 0;
+    const total = paid + remaining;
+
+    // Create partial payment success UI
+    verificationStatus.innerHTML = `
+    <div class="status-success partial-success">
+      <div class="status-success-header">
+        <i class="fas fa-check-circle status-success-icon"></i>
+        <h3 class="status-success-title">Partial Payment Accepted</h3>
+      </div>
+      <div class="status-success-details">
+        <p>Your booking has been confirmed with a partial payment. A balance is still due.</p>
+        <div class="payment-summary">
+          <div class="payment-row">
+            <span>Paid Amount:</span>
+            <span>EGP ${paid.toFixed(2)}</span>
+          </div>
+          <div class="payment-row highlight">
+            <span>Remaining Balance:</span>
+            <span>EGP ${remaining.toFixed(2)}</span>
+          </div>
+          <div class="payment-row total">
+            <span>Total Price:</span>
+            <span>EGP ${total.toFixed(2)}</span>
+          </div>
+        </div>
+        <div class="payment-instructions">
+          <p>You can pay the remaining balance:</p>
+          <ul>
+            <li>Upon arrival at the venue</li>
+            <li>Through another InstaPay payment before your booking</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  `;
+
+    // Add some quick CSS for the partial payment success
+    const styleElement = document.createElement('style');
+    styleElement.id = 'partial-success-styles';
+    styleElement.textContent = `
+    .partial-success {
+      border-color: #047857;
+    }
+    
+    .partial-success .status-success-header {
+      background-color: #d1fae5;
+    }
+    
+    .payment-summary {
+      background-color: #f9fafb;
+      border-radius: 6px;
+      padding: 12px;
+      margin: 12px 0;
+    }
+    
+    .payment-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+    }
+    
+    .payment-row.highlight {
+      font-weight: bold;
+      color: #f59e0b;
+      border-bottom: 1px solid #e5e7eb;
+      border-top: 1px solid #e5e7eb;
+      padding: 10px 0;
+      margin: 6px 0;
+    }
+    
+    .payment-row.total {
+      font-weight: bold;
+      margin-top: 6px;
+    }
+    
+    .payment-instructions {
+      margin-top: 16px;
+    }
+    
+    .payment-instructions ul {
+      padding-left: 20px;
+    }
+    
+    .payment-instructions li {
+      margin: 6px 0;
+    }
+  `;
+
+    if (!document.getElementById('partial-success-styles')) {
+      document.head.appendChild(styleElement);
+    }
+
+    // Show confirmation button
+    const confirmationAction = DOM.byId('confirmation-action');
+    if (confirmationAction) {
+      DOM.show(confirmationAction);
+    }
+
+    // Hide action buttons
+    const actionButtons = DOM.byId('verify-payment')?.parentNode;
+    if (actionButtons) {
+      DOM.hide(actionButtons);
+    }
+  }
+
+  /**
+ * Show success message when a complete payment is made after a partial payment
+ * @param {number} totalAmount - The total amount paid
+ */
+  function showCompletePaymentSuccess(totalAmount) {
+    const verificationStatus = DOM.byId('verification-status');
+    if (!verificationStatus) return;
+
+    verificationStatus.innerHTML = `
+    <div class="status-success">
+      <div class="status-success-header">
+        <i class="fas fa-check-circle status-success-icon"></i>
+        <h3 class="status-success-title">Payment Completed Successfully</h3>
+      </div>
+      <div class="status-success-details">
+        <p>You have successfully paid the full amount for your booking.</p>
+        <div class="payment-summary">
+          <div class="payment-row total">
+            <span>Total Paid:</span>
+            <span>EGP ${totalAmount.toFixed(2)}</span>
+          </div>
+        </div>
+        <p>Your booking is now confirmed. Thank you!</p>
+      </div>
+    </div>
+  `;
+
+    // Show confirmation button
+    const confirmationAction = DOM.byId('confirmation-action');
+    if (confirmationAction) {
+      DOM.show(confirmationAction);
+    }
+
+    // Hide action buttons
+    const actionButtons = DOM.byId('verify-payment')?.parentNode;
+    if (actionButtons) {
+      DOM.hide(actionButtons);
+    }
+
+    // Process the booking with the completed payment
+    setTimeout(() => {
+      BookingModal.handleVerifiedInstapayPayment(false); // Not partial anymore
+    }, 500);
+  }
+
+  /**
+ * Show reservation receipt after booking is confirmed
+ * This replaces or enhances the final step of booking confirmation
+ * 
+ * @param {Object} bookingData - The confirmed booking data
+ */
+  function showReservationReceipt(bookingData) {
+    // Get the container - this could be the booking modal content
+    // or another designated area for the receipt
+    const modalContent = document.querySelector('.modal-content');
+    if (!modalContent) return;
+
+    // Extract booking details from the data
+    const {
+      resourceName,
+      date,
+      startTime,
+      endTime,
+      price,
+      paymentMethod,
+      reference,
+      // Check for partial payment info
+      partialPayment
+    } = bookingData;
+
+    // Format date
+    const formattedDate = new Date(date).toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
+    });
+
+    // Format time
+    const formattedStartTime = Utils.formatTime(startTime);
+    const formattedEndTime = Utils.formatTime(endTime);
+
+    // Calculate duration
+    const startMinutes = Utils.convertTimeToMinutes(startTime);
+    const endMinutes = Utils.convertTimeToMinutes(endTime);
+    const durationHours = (endMinutes - startMinutes) / 60;
+    const formattedDuration = Utils.formatDuration(durationHours);
+
+    // Generate QR code data - combine resource, date, time, reference
+    const qrData = `KROO:${reference}:${resourceName}:${date}:${startTime}-${endTime}`;
+
+    // Clear all existing steps
+    BookingModal.hideAllSteps();
+
+    // Create new receipt step
+    const receiptStep = document.createElement('div');
+    receiptStep.id = 'booking-receipt-step';
+    receiptStep.className = 'booking-step';
+    receiptStep.style.display = 'block';
+
+    // Set up receipt content with nice theme-matching styling
+    receiptStep.innerHTML = `
+    <div class="receipt-container">
+      <div class="receipt-header">
+        <div class="receipt-logo">
+          <i class="fas fa-check-circle"></i>
+        </div>
+        <h2 class="receipt-title">Booking Confirmed</h2>
+        <p class="receipt-subtitle">Your reservation has been successfully booked</p>
+      </div>
+      
+      <div class="receipt-confirmation-number">
+        <span class="label">Booking Reference:</span>
+        <span class="value">${reference}</span>
+      </div>
+      
+      <div class="receipt-body">
+        <div class="receipt-section">
+          <h3 class="section-title">
+            <i class="fas fa-building"></i> Resource
+          </h3>
+          <p class="section-content">${resourceName}</p>
+        </div>
+        
+        <div class="receipt-section">
+          <h3 class="section-title">
+            <i class="fas fa-calendar-alt"></i> Date
+          </h3>
+          <p class="section-content">${formattedDate}</p>
+        </div>
+        
+        <div class="receipt-section">
+          <h3 class="section-title">
+            <i class="fas fa-clock"></i> Time
+          </h3>
+          <p class="section-content">${formattedStartTime} - ${formattedEndTime} (${formattedDuration})</p>
+        </div>
+        
+        <div class="receipt-section">
+          <h3 class="section-title">
+            <i class="fas fa-money-bill-wave"></i> Payment
+          </h3>
+          <div class="payment-details">
+            <div class="payment-row">
+              <span class="payment-label">Amount:</span>
+              <span class="payment-value">EGP ${price.toFixed(2)}</span>
+            </div>
+            <div class="payment-row">
+              <span class="payment-label">Method:</span>
+              <span class="payment-value">${Utils.capitalizeFirstLetter(paymentMethod)}</span>
+            </div>
+            ${partialPayment ? `
+              <div class="payment-row highlight">
+                <span class="payment-label">Payment Status:</span>
+                <span class="payment-value">Partial Payment</span>
+              </div>
+              <div class="payment-row">
+                <span class="payment-label">Paid Amount:</span>
+                <span class="payment-value">EGP ${partialPayment.paid.toFixed(2)}</span>
+              </div>
+              <div class="payment-row">
+                <span class="payment-label">Remaining:</span>
+                <span class="payment-value">EGP ${partialPayment.remaining.toFixed(2)}</span>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+      
+      <div class="receipt-qr">
+        <div class="qr-code" id="booking-qr"></div>
+        <p class="qr-help">Show this QR code at the venue</p>
+      </div>
+      
+      <div class="receipt-actions">
+        <button id="download-receipt" class="btn btn-outline">
+          <i class="fas fa-download"></i> Download Receipt
+        </button>
+        <button id="close-receipt" class="btn btn-primary">
+          <i class="fas fa-check"></i> Done
+        </button>
+      </div>
+    </div>
+  `;
+
+    // Add receipt to modal content
+    modalContent.appendChild(receiptStep);
+
+    // Add CSS for the receipt
+    const styleElement = document.createElement('style');
+    styleElement.id = 'receipt-styles';
+    styleElement.textContent = `
+    .receipt-container {
+      background-color: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      padding: 2rem;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+    
+    .receipt-header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    
+    .receipt-logo {
+      font-size: 3rem;
+      color: #f59e0b;
+      margin-bottom: 1rem;
+    }
+    
+    .receipt-title {
+      color: #1e293b;
+      font-size: 1.5rem;
+      margin: 0 0 0.5rem 0;
+    }
+    
+    .receipt-subtitle {
+      color: #64748b;
+      margin: 0;
+    }
+    
+    .receipt-confirmation-number {
+      background-color: #fffbeb;
+      border: 1px solid #fcd34d;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .receipt-confirmation-number .label {
+      color: #92400e;
+      font-weight: 500;
+    }
+    
+    .receipt-confirmation-number .value {
+      color: #d97706;
+      font-weight: bold;
+      font-family: monospace;
+      font-size: 1.1rem;
+    }
+    
+    .receipt-body {
+      margin-bottom: 1.5rem;
+    }
+    
+    .receipt-section {
+      margin-bottom: 1rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .receipt-section:last-child {
+      border-bottom: none;
+    }
+    
+    .section-title {
+      color: #64748b;
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin: 0 0 0.5rem 0;
+      display: flex;
+      align-items: center;
+    }
+    
+    .section-title i {
+      color: #f59e0b;
+      margin-right: 0.5rem;
+    }
+    
+    .section-content {
+      color: #1e293b;
+      font-size: 1rem;
+      font-weight: 500;
+      margin: 0;
+    }
+    
+    .payment-details {
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .payment-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.5rem;
+    }
+    
+    .payment-row.highlight {
+      font-weight: bold;
+      color: #f59e0b;
+      border-bottom: 1px solid #e5e7eb;
+      border-top: 1px solid #e5e7eb;
+      padding: 0.5rem 0;
+      margin: 0.5rem 0;
+    }
+    
+    .payment-label {
+      color: #64748b;
+    }
+    
+    .payment-value {
+      color: #1e293b;
+      font-weight: 500;
+    }
+    
+    .receipt-qr {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    
+    .qr-code {
+      width: 150px;
+      height: 150px;
+      background-color: #f1f5f9;
+      border: 1px solid #e5e7eb;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .qr-help {
+      color: #64748b;
+      font-size: 0.875rem;
+      margin: 0;
+    }
+    
+    .receipt-actions {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    
+    .receipt-actions button {
+      flex: 1;
+      padding: 0.75rem 1rem;
+    }
+  `;
+
+    if (!document.getElementById('receipt-styles')) {
+      document.head.appendChild(styleElement);
+    }
+
+    // Initialize QR code (if you have a QR library available)
+    // If you don't have a QR library, you can use a placeholder or leave this part out
+    try {
+      // This is a placeholder - replace with your actual QR code generation
+      // Example using qrcode.js library:
+      if (typeof QRCode !== 'undefined') {
+        new QRCode(document.getElementById('booking-qr'), {
+          text: qrData,
+          width: 150,
+          height: 150
+        });
+      } else {
+        // Fallback to placeholder
+        const qrElement = document.getElementById('booking-qr');
+        if (qrElement) {
+          qrElement.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;"><i class="fas fa-qrcode" style="font-size:3rem;color:#cbd5e1;"></i></div>';
+        }
+      }
+    } catch (error) {
+      console.warn('Could not generate QR code:', error);
+    }
+
+    // Add event listeners for the buttons
+    setTimeout(() => {
+      const downloadBtn = document.getElementById('download-receipt');
+      const closeBtn = document.getElementById('close-receipt');
+
+      if (downloadBtn) {
+        downloadBtn.addEventListener('click', () => {
+          // Simple implementation - open a printable version
+          // In a real app, you'd generate a PDF or image
+          const printWindow = window.open('', '_blank');
+          if (printWindow) {
+            printWindow.document.write(`
+            <html>
+              <head>
+                <title>Booking Receipt - ${reference}</title>
+                <style>
+                  body { font-family: Arial, sans-serif; padding: 20px; }
+                  .header { text-align: center; margin-bottom: 20px; }
+                  .detail { margin-bottom: 10px; }
+                  .label { font-weight: bold; }
+                </style>
+              </head>
+              <body>
+                <div class="header">
+                  <h1>Booking Confirmation</h1>
+                  <p>Reference: ${reference}</p>
+                </div>
+                <div class="detail">
+                  <span class="label">Resource:</span> ${resourceName}
+                </div>
+                <div class="detail">
+                  <span class="label">Date:</span> ${formattedDate}
+                </div>
+                <div class="detail">
+                  <span class="label">Time:</span> ${formattedStartTime} - ${formattedEndTime}
+                </div>
+                <div class="detail">
+                  <span class="label">Duration:</span> ${formattedDuration}
+                </div>
+                <div class="detail">
+                  <span class="label">Amount:</span> EGP ${price.toFixed(2)}
+                </div>
+                <div class="detail">
+                  <span class="label">Payment Method:</span> ${Utils.capitalizeFirstLetter(paymentMethod)}
+                </div>
+                ${partialPayment ? `
+                  <div class="detail">
+                    <span class="label">Payment Status:</span> Partial Payment
+                  </div>
+                  <div class="detail">
+                    <span class="label">Paid Amount:</span> EGP ${partialPayment.paid.toFixed(2)}
+                  </div>
+                  <div class="detail">
+                    <span class="label">Remaining:</span> EGP ${partialPayment.remaining.toFixed(2)}
+                  </div>
+                ` : ''}
+                <div style="margin-top: 30px; text-align: center;">
+                  <p>Thank you for using KROO Reservations!</p>
+                </div>
+              </body>
+            </html>
+          `);
+            printWindow.document.close();
+            printWindow.print();
+          } else {
+            Toast.show('error', 'Could not open print window. Please check your browser settings.');
+          }
+        });
+      }
+
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          BookingModal.hide();
+          // Refresh resources view
+          UI.renderResources();
+          // Also refresh bookings view in case user navigates there
+          UI.renderBookings();
+        });
+      }
+    }, 100);
+  }
 
   /**
    * Update local data structures for immediate UI feedback
@@ -3045,11 +3736,17 @@
   ///////////////////////////// FORMULATE BOOKING OBJ START
 
   /**
-   * Helper function to add "Add Payment" button for partial payments
-   */
-  function setupPartialPaymentButton() {
+  * Sets up the partial payment UI buttons and handlers
+  * @param {number} paidAmount - Amount already paid
+  * @param {number} remainingAmount - Amount still owed
+  */
+  function setupPartialPaymentButton(paidAmount, remainingAmount) {
+    // Store partial payment info in AppState for later use
+    AppState.partialPaymentAmount = paidAmount;
+    AppState.remainingAmount = remainingAmount;
+
     // Remove any existing button first
-    const existingBtn = document.getElementById('add-partial-payment');
+    const existingBtn = document.getElementById('accept-partial-payment');
     if (existingBtn) {
       existingBtn.remove();
     }
@@ -3057,26 +3754,56 @@
     const verificationStatus = DOM.byId('verification-status');
     if (!verificationStatus) return;
 
-    const warningSection = verificationStatus.querySelector('.status-warning');
+    const warningSection = verificationStatus.querySelector('.status-partial-details') ||
+      verificationStatus.querySelector('.status-warning-details');
+
     if (!warningSection) return;
 
-    // Create button
-    const addPaymentBtn = document.createElement('button');
-    addPaymentBtn.id = 'add-partial-payment';
-    addPaymentBtn.className = 'btn btn-primary';
-    addPaymentBtn.textContent = 'Add This Payment';
+    // Check if buttons container already exists
+    let buttonContainer = warningSection.querySelector('.partial-payment-options');
 
-    // Create container
-    const buttonContainer = document.createElement('div');
-    buttonContainer.className = 'button-container';
-    buttonContainer.style.marginTop = '12px';
-    buttonContainer.appendChild(addPaymentBtn);
+    // If not, create it
+    if (!buttonContainer) {
+      buttonContainer = document.createElement('div');
+      buttonContainer.className = 'partial-payment-options';
+      buttonContainer.style.display = 'flex';
+      buttonContainer.style.justifyContent = 'space-between';
+      buttonContainer.style.marginTop = '16px';
+      buttonContainer.style.gap = '12px';
+      warningSection.appendChild(buttonContainer);
+    } else {
+      // Clear existing content
+      buttonContainer.innerHTML = '';
+    }
 
-    // Add to warning section
-    warningSection.appendChild(buttonContainer);
+    // Create Accept button
+    const acceptBtn = document.createElement('button');
+    acceptBtn.id = 'accept-partial-payment';
+    acceptBtn.className = 'btn btn-outline';
+    acceptBtn.textContent = 'Accept Partial Payment';
+    acceptBtn.style.flex = '1';
 
-    // Add event listener
-    addPaymentBtn.addEventListener('click', BookingModal.addPartialPayment);
+    // Create Complete button
+    const completeBtn = document.createElement('button');
+    completeBtn.id = 'complete-payment';
+    completeBtn.className = 'btn btn-primary';
+    completeBtn.textContent = 'Complete Payment';
+    completeBtn.style.flex = '1';
+
+    // Add buttons to container
+    buttonContainer.appendChild(acceptBtn);
+    buttonContainer.appendChild(completeBtn);
+
+    // Add event listeners
+    acceptBtn.addEventListener('click', function () {
+      // Call with explicit isPartial=true flag
+      BookingModal.handleVerifiedInstapayPayment(true);
+    });
+
+    completeBtn.addEventListener('click', function () {
+      // Show instructions for completing the payment
+      showCompletePaymentInstructions(remainingAmount);
+    });
   }
 
   /**
@@ -3122,7 +3849,7 @@
       reference: bookingReference, // This is the BOOKING reference
       resourceId: currentResourceId,
       resourceName: resource.name,
-      resourceLabel: resource.label,
+      resourceLabel: resource.resourceLabel,
       date: selectedTimeSlot.date,
       startTime: selectedTimeSlot.startTime,
       endTime: selectedTimeSlot.endTime,
@@ -3137,6 +3864,8 @@
       paymentStatus: 'completed',
       createdAt: new Date().toISOString()
     };
+
+    console.log(resource)
 
     // For InstaPay payments, include the payment reference as well
     if (paymentMethodObj.id === 'instapay') {
@@ -3217,7 +3946,7 @@
   }
 
   /**
-   * Add payment details to booking request for Instapay
+   * Add payment details to booking request for Instapay including partial payment support
    * @param {Object} bookingRequest - The base booking request
    * @param {Object} verificationResult - Verification result if available
    * @returns {Object} Booking request with payment details
@@ -3230,16 +3959,44 @@
 
     // If we have verification results
     if (verificationResult) {
+      // Check if this is a partial payment
+      const isPartialPayment = AppState.selectedTimeSlot &&
+        AppState.selectedTimeSlot.isPartialPayment === true;
+
+      // Add payment details including partial payment info if applicable
+      const paymentDetails = {
+        paymentReference: AppState.getPaymentReference(), // Include PAYMENT reference
+        verificationImage: verificationResult.fileUrl,
+        verificationStatus: verificationResult.verified ? 'VERIFIED' : 'UNVERIFIED',
+        verificationMessage: verificationResult.message,
+        verificationConfidence: verificationResult.confidence,
+        verificationTimestamp: verificationResult.timestamp
+      };
+
+      // Add partial payment details if applicable
+      if (isPartialPayment) {
+        paymentDetails.isPartialPayment = true;
+        paymentDetails.paidAmount = AppState.selectedTimeSlot.finalPrice;
+        paymentDetails.remainingAmount = AppState.selectedTimeSlot.remainingAmount;
+        paymentDetails.totalAmount = paymentDetails.paidAmount + paymentDetails.remainingAmount;
+
+        // Set payment status for partial payments
+        return {
+          ...bookingRequest,
+          paymentDetails: paymentDetails,
+          paymentStatus: 'partial_payment',
+          partialPayment: {
+            paid: paymentDetails.paidAmount,
+            remaining: paymentDetails.remainingAmount,
+            total: paymentDetails.totalAmount
+          }
+        };
+      }
+
+      // Regular payment (not partial)
       return {
         ...bookingRequest,
-        paymentDetails: {
-          paymentReference: AppState.getPaymentReference(), // Include PAYMENT reference
-          verificationImage: verificationResult.fileUrl,
-          verificationStatus: verificationResult.verified ? 'VERIFIED' : 'UNVERIFIED',
-          verificationMessage: verificationResult.message,
-          verificationConfidence: verificationResult.confidence,
-          verificationTimestamp: verificationResult.timestamp
-        },
+        paymentDetails: paymentDetails,
         paymentStatus: verificationResult.verified ? 'completed' : 'pending_verification'
       };
     }
@@ -3263,12 +4020,18 @@
   ///////////////////////////// INSTAPAY VERFICATION HELPERS
 
   /**
-   * Enhanced function to get user-friendly verification messages including duplicate reference number detection
+   * Enhanced function to get user-friendly verification messages but with new decision object support
    * Using EGP currency symbol consistently
    * @param {Object} verificationResult - The verification result from the backend
+   * @param {Object} decision - The new decision object from backend (optional)
    * @returns {string} A user-friendly message explaining the verification result
    */
-  function getVerificationMessage(verificationResult) {
+  function getVerificationMessage(verificationResult, decision = null) {
+    // If we have a decision object with a message, use that
+    if (decision && decision.message) {
+      return decision.message;
+    }
+
     if (!verificationResult) {
       return 'Could not verify the payment. Please try again.';
     }
@@ -3327,12 +4090,19 @@
 
   /**
    * Enhanced function to update the verification UI with specific warnings for missing information
-   * or duplicate transaction references
+   * or duplicate transaction references using the new backend decision object
    * Using EGP currency symbol consistently
    * @param {Object} verificationResult - The verification result from the backend
    * @param {Object} ocrResult - OCR result data if available
+   * @param {Object} decision - New decision object from backend containing status and message
    */
-  function updateVerificationUI(verificationResult, ocrResult) {
+  /**
+   * Enhanced function to update the verification UI with better handling for partial payments
+   * @param {Object} verificationResult - The verification result from the backend
+   * @param {Object} ocrResult - OCR result data if available
+   * @param {Object} decision - New decision object from backend containing status and message
+   */
+  function updateVerificationUI(verificationResult, ocrResult, decision = {}) {
     const verificationStatus = DOM.byId('verification-status');
     if (!verificationStatus) return;
 
@@ -3341,14 +4111,25 @@
     const isRightAmount = verificationResult?.isRightAmount || false;
     const amountStatus = verificationResult?.amountStatus || 'unknown';
     const remainder = verificationResult?.remainder || 0;
-    const confidence = ocrResult?.confidence || 'Medium';
 
-    // Check if there are specific reasons for the verification result
+    // Get confidence value from OCR for amount if available
+    let confidenceDisplay = 'Medium';
+    if (ocrResult?.confidence?.amount) {
+      const confidencePercent = (ocrResult.confidence.amount * 100).toFixed(1);
+      confidenceDisplay = `${confidencePercent}%`;
+    }
+
+    // Check for specific issues
     const reasons = verificationResult?.reasons || [];
     const warnings = verificationResult?.warnings || [];
 
     // Generate a verification ID for successful verifications
     const verificationId = `VRF-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`.toUpperCase();
+
+    // Get decision data from new backend response
+    const decisionStatus = decision?.decision || null;  // 'APPROVED', 'REJECTED', 'PARTIAL'
+    const decisionMessage = decision?.message || null;
+    const decisionCode = decision?.primaryCode || null;
 
     // Direct "missing fields" check
     const missingFields = [];
@@ -3390,7 +4171,8 @@
       return;
     }
 
-    if (isLegitimate && isRightAmount) {
+    // Handle based on decision from backend if available
+    if (decisionStatus === 'APPROVED' || (isLegitimate && isRightAmount)) {
       // Payment is fully verified
       verificationStatus.innerHTML = `
       <div class="status-success">
@@ -3399,10 +4181,10 @@
           <h3 class="status-success-title">Payment Verified Successfully</h3>
         </div>
         <div class="status-success-details">
-          <p>Your payment has been verified and your booking is confirmed.</p>
+          <p>${decisionMessage || 'Your payment has been verified and your booking is confirmed.'}</p>
           <ul class="status-success-list">
             <li>Amount: EGP ${AppState.selectedTimeSlot.finalPrice.toFixed(2)}</li>
-            <li>Confidence: ${confidence}</li>
+            <li>Confidence: ${confidenceDisplay}</li>
             <li>Verification ID: ${verificationId}</li>
             ${verificationResult.metadataTimestampUsed ? '<li>Used image metadata timestamp for verification</li>' : ''}
           </ul>
@@ -3421,33 +4203,46 @@
       if (actionButtons) {
         DOM.hide(actionButtons);
       }
-
-      // Process the booking
-      BookingModal.processBooking();
     }
-    else if (isLegitimate && amountStatus === 'less') {
+    else if (decisionStatus === 'PARTIAL' || (isLegitimate && amountStatus === 'less')) {
       // Payment is legitimate but amount is less than expected
       const paidAmount = AppState.selectedTimeSlot.finalPrice - Math.abs(remainder);
+      const remainingAmount = Math.abs(remainder);
+      const percentPaid = Math.round((paidAmount / AppState.selectedTimeSlot.finalPrice) * 100);
+
+      // Add partial payment styling if not already added
+      addPartialPaymentCSS();
 
       verificationStatus.innerHTML = `
-      <div class="status-warning">
-        <div class="status-warning-header">
-          <i class="fas fa-exclamation-triangle status-warning-icon"></i>
-          <h3 class="status-warning-title">Partial Payment Detected</h3>
-        </div>
-        <div class="status-warning-details">
-          <p>We've detected a payment, but the amount is less than required:</p>
-          <ul class="status-warning-list">
-            <li>Paid: EGP ${paidAmount.toFixed(2)}</li>
-            <li>Remaining: EGP ${Math.abs(remainder).toFixed(2)}</li>
-            ${warnings.length > 0 ? `<li class="warning-note">Note: ${warnings[0]}</li>` : ''}
-          </ul>
-          <p>You can complete the payment or accept the current partial payment.</p>
-        </div>
+    <div class="status-partial">
+      <div class="status-partial-header">
+        <i class="fas fa-percentage status-partial-icon"></i>
+        <h3 class="status-partial-title">Partial Payment Detected</h3>
       </div>
-    `;
+      <div class="status-partial-details">
+        <p>${decisionMessage || `We've detected a payment for ${percentPaid}% of the required amount.`}</p>
+        
+        <div class="payment-progress">
+          <div class="payment-progress-bar" style="width: ${percentPaid}%">
+            <span class="payment-progress-text">${percentPaid}%</span>
+          </div>
+        </div>
+        
+        <ul class="status-partial-list">
+          <li>Paid: EGP ${paidAmount.toFixed(2)}</li>
+          <li>Remaining: EGP ${remainingAmount.toFixed(2)}</li>
+          <li>Total required: EGP ${AppState.selectedTimeSlot.finalPrice.toFixed(2)}</li>
+        </ul>
+      </div>
+    </div>
+  `;
+
+      // Set up the partial payment buttons with the calculated amounts
+      setTimeout(() => {
+        setupPartialPaymentButton(paidAmount, remainingAmount);
+      }, 100);
     }
-    else if (isLegitimate && amountStatus === 'more') {
+    else if (decisionStatus === 'OVERPAID' || (isLegitimate && amountStatus === 'more')) {
       // Payment is legitimate but amount is more than expected
       const paidAmount = AppState.selectedTimeSlot.finalPrice + Math.abs(remainder);
 
@@ -3458,11 +4253,11 @@
           <h3 class="status-info-title">Overpayment Detected</h3>
         </div>
         <div class="status-info-details">
-          <p>We've detected a payment with an amount higher than required:</p>
+          <p>${decisionMessage || 'We\'ve detected a payment with an amount higher than required:'}</p>
           <ul class="status-info-list">
             <li>Required: EGP ${AppState.selectedTimeSlot.finalPrice.toFixed(2)}</li>
             <li>Paid: EGP ${paidAmount.toFixed(2)}</li>
-            <li>Difference: EGP ${Math.abs(remainder).toFixed(2)}</li>
+            <li>Excess: EGP ${Math.abs(remainder).toFixed(2)}</li>
           </ul>
           <p>The booking will be confirmed with the extra amount noted.</p>
         </div>
@@ -3480,22 +4275,25 @@
       if (actionButtons) {
         DOM.hide(actionButtons);
       }
-
-      // Process the booking
-      BookingModal.processBooking();
     }
     else {
-      // Payment verification failed
+      // Payment verification failed - use decision message from backend if available
       // Check for specific issues
       const hasDuplicateReferenceIssue = reasons.some(reason =>
         reason.toLowerCase().includes('duplicate') ||
         reason.toLowerCase().includes('already used') ||
         reason.toLowerCase().includes('previously verified')
-      );
+      ) || decisionCode === 3; // Assuming code 3 is for duplicate reference
+
+      const hasOldTransactionIssue = reasons.some(reason =>
+        reason.toLowerCase().includes('too old') ||
+        reason.toLowerCase().includes('ago, max allowed')
+      ) || decisionCode === 4;
 
       // Create custom error list based on issues
       let reasonsList = '';
 
+      // Don't repeat the message in the list when using decisionMessage
       if (hasDuplicateReferenceIssue) {
         // Show duplicate reference error with special styling
         reasonsList = `
@@ -3506,6 +4304,10 @@
           <li>Or contact support if you believe this is an error</li>
         </ul>
       `;
+      }
+      else if (decisionMessage) {
+        // Don't include a list if we're using the decision message
+        reasonsList = '';
       }
       else if (reasons.length > 0) {
         // Show all provided reasons
@@ -3541,6 +4343,18 @@
         </div>
       `;
       }
+      else if (hasOldTransactionIssue || decisionCode === 4 || decisionCode === 2) { // Time-related errors
+        extraHelp = `
+        <div class="error-example">
+          <p class="error-example-title">What to do:</p>
+          <ul class="error-example-list">
+            <li>1. Make a new payment for this booking</li>
+            <li>2. Upload the screenshot immediately after making the payment</li>
+            <li>3. Ensure the transaction timestamp is recent (less than 10 minutes old)</li>
+          </ul>
+        </div>
+      `;
+      }
       else {
         extraHelp = `
         <div class="error-example">
@@ -3565,14 +4379,333 @@
           <h3 class="status-error-title">Verification Failed</h3>
         </div>
         <div class="status-error-details">
-          <p>${getVerificationMessage(verificationResult)}</p>
+          <p>${decisionMessage || getVerificationMessage(verificationResult)}</p>
           ${reasonsList}
           ${extraHelp}
-          ${!hasDuplicateReferenceIssue ? `<p style="margin-top: 0.5rem;">Try uploading a clearer image that shows all required information.</p>` : ''}
+          ${!hasDuplicateReferenceIssue && !hasOldTransactionIssue ? `<p style="margin-top: 0.5rem;">Try uploading a clearer image that shows all required information.</p>` : ''}
         </div>
       </div>
     `;
     }
+  }
+
+  /**
+   * Add CSS styles for partial payment UI
+   */
+  function addPartialPaymentCSS() {
+    // Check if styles already exist
+    if (document.getElementById('partial-payment-styles')) return;
+
+    const styleElement = document.createElement('style');
+    styleElement.id = 'partial-payment-styles';
+    styleElement.textContent = `
+    .status-partial {
+      border: 1px solid #f59e0b;
+      border-radius: 8px;
+      background-color: #fffbeb;
+      overflow: hidden;
+    }
+    
+    .status-partial-header {
+      display: flex;
+      align-items: center;
+      padding: 16px;
+      background-color: #fef3c7;
+      border-bottom: 1px solid #f59e0b;
+    }
+    
+    .status-partial-icon {
+      color: #d97706;
+      font-size: 1.5rem;
+      margin-right: 12px;
+    }
+    
+    .status-partial-title {
+      color: #92400e;
+      margin: 0;
+      font-size: 1.25rem;
+    }
+    
+    .status-partial-details {
+      padding: 16px;
+    }
+    
+    .status-partial-list {
+      list-style: none;
+      padding: 0;
+      margin: 12px 0;
+    }
+    
+    .status-partial-list li {
+      padding: 4px 0;
+      display: flex;
+      justify-content: space-between;
+    }
+    
+    .payment-progress {
+      height: 20px;
+      background-color: #e5e7eb;
+      border-radius: 10px;
+      margin: 12px 0;
+      overflow: hidden;
+    }
+    
+    .payment-progress-bar {
+      height: 100%;
+      background-color: #f59e0b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: width 0.5s ease;
+      position: relative;
+    }
+    
+    .payment-progress-text {
+      color: white;
+      font-weight: bold;
+      font-size: 0.75rem;
+      position: absolute;
+      right: 8px;
+    }
+    
+    .partial-payment-options {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 16px;
+      gap: 12px;
+    }
+    
+    .partial-payment-options button {
+      flex: 1;
+    }
+  `;
+
+    document.head.appendChild(styleElement);
+  }
+
+  /**
+  * Show instructions for completing the payment with theme-matching styling
+  * @param {number} remainingAmount - Amount still to be paid
+  */
+  function showCompletePaymentInstructions(remainingAmount) {
+    const verificationStatus = DOM.byId('verification-status');
+    if (!verificationStatus) return;
+
+    // Store the remaining amount in case we need it later
+    AppState.remainingAmount = remainingAmount;
+
+    // Update the expected amount in AppState for next verification
+    // This is crucial so the next upload is verified against the remaining amount
+    AppState.expectedRemainingAmount = remainingAmount;
+
+    verificationStatus.innerHTML = `
+    <div class="status-info payment-completion">
+      <div class="status-info-header">
+        <i class="fas fa-info-circle status-info-icon"></i>
+        <h3 class="status-info-title">Complete Your Payment</h3>
+      </div>
+      <div class="status-info-details">
+        <div class="remaining-amount-banner">
+          <span class="amount-label">Please pay the remaining balance:</span>
+          <span class="amount-value">EGP ${remainingAmount.toFixed(2)}</span>
+        </div>
+        
+        <div class="payment-instructions">
+          <div class="instructions-header">
+            <i class="fas fa-credit-card"></i>
+            <span>Payment Instructions</span>
+          </div>
+          <ol class="payment-steps">
+            <li>
+              <span class="step-number">1</span>
+              <span class="step-text">Open your InstaPay app and make a new payment</span>
+            </li>
+            <li>
+              <span class="step-number">2</span>
+              <span class="step-text">Transfer <strong>EGP ${remainingAmount.toFixed(2)}</strong> to the same recipient</span>
+            </li>
+            <li>
+              <span class="step-number">3</span>
+              <span class="step-text">Take a screenshot of the new payment receipt</span>
+            </li>
+            <li>
+              <span class="step-number">4</span>
+              <span class="step-text">Upload the screenshot below</span>
+            </li>
+          </ol>
+        </div>
+        
+        <div class="action-buttons">
+          <button id="back-to-partial" class="btn btn-outline">
+            <i class="fas fa-arrow-left"></i> Back
+          </button>
+          <button id="upload-new-payment" class="btn btn-primary">
+            <i class="fas fa-upload"></i> Upload New Payment
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+    // Add special CSS for this view - using theme-appropriate colors
+    // The primary color used here is #f59e0b (amber-500)
+    const styleElement = document.createElement('style');
+    styleElement.id = 'payment-instructions-styles';
+    styleElement.textContent = `
+    .payment-completion {
+      border-color: #f59e0b;
+    }
+    
+    .payment-completion .status-info-header {
+      background-color: #fffbeb;
+    }
+    
+    .payment-completion .status-info-icon {
+      color: #f59e0b;
+    }
+    
+    .payment-completion .status-info-title {
+      color: #92400e;
+    }
+    
+    .remaining-amount-banner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background-color: #fffbeb;
+      border: 1px solid #fcd34d;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin: 16px 0;
+    }
+    
+    .amount-label {
+      font-size: 1rem;
+      color: #92400e;
+    }
+    
+    .amount-value {
+      font-size: 1.25rem;
+      font-weight: bold;
+      color: #d97706;
+    }
+    
+    .instructions-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 16px;
+      color: #4b5563;
+      font-weight: 500;
+    }
+    
+    .instructions-header i {
+      margin-right: 8px;
+      color: #f59e0b;
+    }
+    
+    .payment-steps {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 24px 0;
+    }
+    
+    .payment-steps li {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+    
+    .step-number {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 28px;
+      height: 28px;
+      background-color: #f59e0b;
+      color: white;
+      border-radius: 50%;
+      margin-right: 12px;
+      flex-shrink: 0;
+      font-weight: bold;
+    }
+    
+    .step-text {
+      padding-top: 4px;
+    }
+    
+    .action-buttons {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 24px;
+      gap: 16px;
+    }
+    
+    .action-buttons button {
+      flex: 1;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-weight: 500;
+    }
+    
+    .action-buttons i {
+      margin-right: 8px;
+    }
+  `;
+
+    if (!document.getElementById('payment-instructions-styles')) {
+      document.head.appendChild(styleElement);
+    }
+
+    // Add event listeners
+    setTimeout(() => {
+      const backBtn = document.getElementById('back-to-partial');
+      const uploadBtn = document.getElementById('upload-new-payment');
+
+      if (backBtn) {
+        backBtn.addEventListener('click', () => {
+          // Go back to verification by re-running verification with existing data
+          const verificationResult = AppState.verificationResult?.detailedResult?.verificationResult || {};
+          const ocrResult = AppState.verificationResult?.detailedResult?.ocrResult || {};
+          const decision = AppState.verificationResult?.detailedResult?.decision || {};
+
+          updateVerificationUI(verificationResult, ocrResult, decision);
+        });
+      }
+
+      if (uploadBtn) {
+        uploadBtn.addEventListener('click', () => {
+          // Clear the file preview if it exists
+          clearFilePreview();
+
+          // Reset file input and trigger click
+          const fileInput = DOM.byId('payment-screenshot');
+          if (fileInput) {
+            fileInput.value = '';
+            fileInput.click();
+          }
+        });
+      }
+    }, 100);
+  }
+
+  /**
+   * Clear the file preview thumbnail
+   */
+  function clearFilePreview() {
+    const filePreview = DOM.byId('file-preview');
+    const uploadInstructions = DOM.byId('upload-instructions');
+
+    if (filePreview) {
+      DOM.hide(filePreview);
+    }
+
+    if (uploadInstructions) {
+      DOM.show(uploadInstructions);
+    }
+
+    // Reset the uploaded file in AppState
+    AppState.uploadedFile = null;
   }
 
   /////////////////////// 🤔🤔🤔🤔
@@ -4012,7 +5145,7 @@
             console.log("With reference:", paymentReference, "expected amount:", expectedAmount);
 
             // Use the existing request method
-            this.request('verifyInstapayPayment', dataToSend, {
+            this.request('processFullVerification', dataToSend, {
               requestId: requestId,
               loaderTitle: 'Verifying Payment',
               loaderMessage: 'Please wait while we verify your payment...',

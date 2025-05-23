@@ -12,6 +12,7 @@ npm-debug.log
 # Ignore local dev/test files
 *.local
 *.env
+env.js
 
 # Ignore backup or temp files
 *~

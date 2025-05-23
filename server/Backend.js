@@ -17,12 +17,19 @@
     const { krooResourcesRooms } = masterFile
     const resourcesArray = readFromJSON(krooResourcesRooms)
     convertImagesToDirectLinkExport(resourcesArray)
+    console.log(resourcesArray)
     return JSON.stringify({ krooResourcesRooms: resourcesArray })
   }
 
   function convertImagesToDirectLinkExport(resourcesArray) {
     resourcesArray.forEach(resource => {
       resource.image = convertDriveUrlToDirectImageUrl(resource.imageLink)
+      // Convert carousel images if they exist
+      if (resource.picsCarousel && Array.isArray(resource.picsCarousel)) {
+        resource.carouselImages = resource.picsCarousel.map(imageLink => 
+          convertDriveUrlToDirectImageUrl(imageLink)
+        )
+      }
     })
   }
 

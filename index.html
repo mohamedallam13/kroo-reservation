@@ -385,22 +385,54 @@
   </div>
 
   <!-- Cancel Booking Modal -->
-  <div id="cancel-modal" class="modal">
+  <div id="cancel-booking-modal" class="modal">
     <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3 class="modal-title">Cancel Booking</h3>
+        <button class="modal-close">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
       <div class="modal-body">
-        <div class="modal-header-simple">
-          <h3 class="modal-title">Cancel Booking</h3>
-          <button id="cancel-modal-close" class="modal-close">
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-        <p class="modal-message">
-          Are you sure you want to cancel this booking? This action cannot be undone.
-        </p>
+        <p class="modal-message">Are you sure you want to cancel this booking?</p>
         <div class="button-group">
-          <button id="cancel-no" class="btn btn-secondary">No, Keep It</button>
-          <button id="cancel-yes" class="btn btn-danger">Yes, Cancel</button>
+          <button id="confirm-cancel" class="btn btn-danger">Yes, Cancel Booking</button>
+          <button id="keep-booking" class="btn btn-outline">No, Keep Booking</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Image Carousel Modal -->
+  <div id="image-carousel-modal" class="image-carousel-modal">
+    <div class="carousel-container">
+      <div class="carousel-header">
+        <h3 id="carousel-title" class="carousel-title">Resource Images</h3>
+        <button id="carousel-close" class="carousel-close">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      
+      <div class="carousel-content">
+        <div id="carousel-images" class="carousel-images">
+          <!-- Images will be dynamically inserted here -->
+        </div>
+        
+        <button id="carousel-prev" class="carousel-nav prev">
+          <i class="fas fa-chevron-left"></i>
+        </button>
+        
+        <button id="carousel-next" class="carousel-nav next">
+          <i class="fas fa-chevron-right"></i>
+        </button>
+        
+        <div id="carousel-counter" class="carousel-counter">
+          1 / 1
+        </div>
+      </div>
+      
+      <div id="carousel-indicators" class="carousel-indicators">
+        <!-- Indicators will be dynamically inserted here -->
       </div>
     </div>
   </div>

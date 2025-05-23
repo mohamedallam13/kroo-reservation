@@ -684,49 +684,76 @@
               : 'status-badge maintenance';
 
             card.innerHTML = `
-          <div class="card-image">
-            <img src="${resource.image}" alt="${resource.name}" loading="lazy">
-            <div class="${statusBadgeClass}">
-              ${Utils.capitalizeFirstLetter(resource.status)}
-            </div>
-          </div>
-          <div class="card-content">
-            <h3 class="card-title">${resource.name}</h3>
-            <div class="card-details">
-              <div class="detail-item">
-                <i class="fas fa-map-marker-alt"></i>
-                <span>${resource.location}</span>
-              </div>
-              <div class="detail-item">
-                <i class="fas fa-users"></i>
-                <span>Capacity: ${resource.capacity} people</span>
-              </div>
-              <div class="detail-item">
-                <i class="fas fa-money-bill-wave"></i>
-                <span>EGP ${resource.pricePerHour}/hour</span>
-              </div>
-            </div>
-            <div class="card-actions">
-              <button 
-                class="btn ${resource.status === 'available' ? 'btn-primary' : 'btn-disabled'}"
-                ${resource.status !== 'available' ? 'disabled' : ''}
-                data-resource-id="${resource.id}"
-              >
-                Book Now
-              </button>
-            </div>
-          </div>
-        `;
+  <div class="card-image" data-resource-id="${resource.id}">
+    <img src="${resource.image}" alt="${resource.name}" loading="lazy">
+    <div class="image-overlay">
+      <i class="fas fa-expand"></i>
+    </div>
+    <div class="${statusBadgeClass}">
+      ${Utils.capitalizeFirstLetter(resource.status)}
+    </div>
+  </div>
+  <div class="card-content">
+    <h3 class="card-title">${resource.name}</h3>
+    <div class="card-details">
+      <div class="detail-item">
+        <i class="fas fa-map-marker-alt"></i>
+        <span>${resource.location}</span>
+      </div>
+      <div class="detail-item">
+        <i class="fas fa-users"></i>
+        <span>Capacity: ${resource.capacity} people</span>
+      </div>
+      <div class="detail-item">
+        <i class="fas fa-money-bill-wave"></i>
+        <span>EGP ${resource.pricePerHour}/hour</span>
+      </div>
+    </div>
+    <div class="card-actions">
+      <button 
+        class="btn ${resource.status === 'available' ? 'btn-primary' : 'btn-disabled'}"
+        ${resource.status !== 'available' ? 'disabled' : ''}
+        data-resource-id="${resource.id}"
+      >
+        Book Now
+      </button>
+    </div>
+  </div>
+`;
 
             resourcesContainer.appendChild(card);
 
-            // Add event listener to the Book Now button
+            // Debug: Check if resource has carousel images
+            console.log('Resource:', resource.name, 'has picsCarousel:', resource.carouselImages);
+
+            // Add event listener for image carousel
+            const cardImage = card.querySelector('.card-image');
+            console.log('Found cardImage element:', cardImage);
+
+            if (cardImage && resource.carouselImages && resource.carouselImages.length > 0) {
+              console.log('Adding click listener for:', resource.name);
+              cardImage.addEventListener('click', function (event) {
+                console.log('Image clicked for:', resource.name);
+                event.stopPropagation();
+                ImageCarousel.open(resource);
+              });
+            } else {
+              console.log('NOT adding click listener because:', {
+                hasCardImage: !!cardImage,
+                hasPicsCarousel: !!resource.carouselImages,
+                carouselLength: resource.carouselImages ? resource.carouselImages.length : 0
+              });
+            }
+
+            // Add event listener to the Book Now button (existing code)
             const bookButton = card.querySelector('button[data-resource-id]');
             if (resource.status === 'available' && bookButton) {
               bookButton.addEventListener('click', () => {
                 BookingModal.open(resource.id);
               });
             }
+
+
           });
         })
         .catch(error => {
@@ -1120,6 +1147,184 @@
       welcomeBanner.style.display = 'none';
     }
   }
+
+  // ===== IMAGE CAROUSEL MODULE =====
+  const ImageCarousel = {
+    currentIndex: 0,
+    images: [],
+    resourceName: '',
+
+    /**
+     * Open carousel with resource images
+     * @param {Object} resource - Resource object with picsCarousel array
+     */
+    open: function (resource) {
+      if (!resource.carouselImages || resource.carouselImages.length === 0) {
+        console.warn('No carousel images found for resource');
+        return;
+      }
+
+      this.images = resource.carouselImages;
+      this.resourceName = resource.name;
+      this.currentIndex = 0;
+
+      // Update modal title
+      const carouselTitle = DOM.byId('carousel-title');
+      if (carouselTitle) {
+        carouselTitle.textContent = `${this.resourceName} - Images`;
+      }
+
+      // Generate images
+      this.generateImages();
+
+      // Generate indicators
+      this.generateIndicators();
+
+      // Update display
+      this.updateDisplay();
+
+      // Show modal
+      const modal = DOM.byId('image-carousel-modal');
+      if (modal) {
+        DOM.addClass(modal, 'active');
+        document.body.style.overflow = 'hidden';
+      }
+    },
+
+    /**
+     * Close carousel modal
+     */
+    hide: function () {
+      const modal = DOM.byId('image-carousel-modal');
+      if (modal) {
+        DOM.removeClass(modal, 'active');
+        document.body.style.overflow = '';
+      }
+    },
+
+    /**
+     * Generate image elements
+     */
+    generateImages: function () {
+      const container = DOM.byId('carousel-images');
+      if (!container) return;
+
+      container.innerHTML = '';
+
+      this.images.forEach((imageUrl, index) => {
+        const img = document.createElement('img');
+        img.className = 'carousel-image';
+        img.src = imageUrl; // Use the URL as-is
+        img.alt = `${this.resourceName} - Image ${index + 1}`;
+        img.loading = index === 0 ? 'eager' : 'lazy';
+
+        container.appendChild(img);
+      });
+    },
+
+    /**
+     * Generate indicator dots
+     */
+    generateIndicators: function () {
+      const container = DOM.byId('carousel-indicators');
+      if (!container) return;
+
+      container.innerHTML = '';
+
+      this.images.forEach((_, index) => {
+        const indicator = document.createElement('div');
+        indicator.className = 'carousel-indicator';
+        if (index === 0) {
+          DOM.addClass(indicator, 'active');
+        }
+
+        indicator.addEventListener('click', () => {
+          this.goToSlide(index);
+        });
+
+        container.appendChild(indicator);
+      });
+    },
+
+    /**
+     * Navigate to specific slide
+     * @param {number} index - Target slide index
+     */
+    goToSlide: function (index) {
+      if (index < 0 || index >= this.images.length) return;
+
+      this.currentIndex = index;
+      this.updateDisplay();
+    },
+
+    /**
+     * Navigate to previous slide
+     */
+    prevSlide: function () {
+      const newIndex = this.currentIndex > 0 ? this.currentIndex - 1 : this.images.length - 1;
+      this.goToSlide(newIndex);
+    },
+
+    /**
+     * Navigate to next slide
+     */
+    nextSlide: function () {
+      const newIndex = this.currentIndex < this.images.length - 1 ? this.currentIndex + 1 : 0;
+      this.goToSlide(newIndex);
+    },
+
+    /**
+     * Update carousel display based on current index
+     */
+    updateDisplay: function () {
+      // Update images transform
+      const imagesContainer = DOM.byId('carousel-images');
+      if (imagesContainer) {
+        const translateX = -this.currentIndex * 100;
+        imagesContainer.style.transform = `translateX(${translateX}%)`;
+      }
+
+      // Update indicators
+      const indicators = document.querySelectorAll('.carousel-indicator');
+      indicators.forEach((indicator, index) => {
+        if (index === this.currentIndex) {
+          DOM.addClass(indicator, 'active');
+        } else {
+          DOM.removeClass(indicator, 'active');
+        }
+      });
+
+      // Update counter
+      const counter = DOM.byId('carousel-counter');
+      if (counter) {
+        counter.textContent = `${this.currentIndex + 1} / ${this.images.length}`;
+      }
+    },
+
+    /**
+     * Handle keyboard navigation
+     * @param {KeyboardEvent} event - Keyboard event
+     */
+    handleKeyboard: function (event) {
+      const modal = DOM.byId('image-carousel-modal');
+      if (!modal || !modal.classList.contains('active')) return;
+
+      switch (event.key) {
+        case 'ArrowLeft':
+          event.preventDefault();
+          this.prevSlide();
+          break;
+        case 'ArrowRight':
+          event.preventDefault();
+          this.nextSlide();
+          break;
+        case 'Escape':
+          event.preventDefault();
+          this.hide();
+          break;
+      }
+    }
+  };
 
   // ===== LOADING SCREENS & INDICATORS =====
 
@@ -4975,7 +5180,9 @@
                 capacity: resource.capacity || 0,
                 status: resource.status || 'available',
                 location: resource.location || 'Not specified',
-                pricePerHour: resource.pricePerHour || 100
+                pricePerHour: resource.pricePerHour || 100,
+                carouselImages: resource.carouselImages || [],
+                resourceLabel: resource.resourceLabel || ""
               }));
 
               resources = processedResources;
@@ -5305,6 +5512,31 @@
     const cancelNo = DOM.byId('cancel-no');
     if (cancelNo) {
       cancelNo.addEventListener('click', CancelModal.hide);
+    }
+
+    // Image carousel event listeners
+    const carouselClose = DOM.byId('carousel-close');
+    if (carouselClose) {
+      carouselClose.addEventListener('click', ImageCarousel.hide.bind(ImageCarousel));
+    }
+
+    const carouselPrev = DOM.byId('carousel-prev');
+    if (carouselPrev) {
+      carouselPrev.addEventListener('click', ImageCarousel.prevSlide.bind(ImageCarousel));
+    }
+
+    const carouselNext = DOM.byId('carousel-next');
+    if (carouselNext) {
+      carouselNext.addEventListener('click', ImageCarousel.nextSlide.bind(ImageCarousel));
+    }
+
+    const carouselModal = DOM.byId('image-carousel-modal');
+    if (carouselModal) {
+      carouselModal.addEventListener('click', function (event) {
+        if (event.target === this) {
+          ImageCarousel.hide();
+        }
+      });
     }
   };
 

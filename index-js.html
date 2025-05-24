@@ -12,7 +12,7 @@
       start: 9, // 9:00 AM
       end: 23   // 11:00 PM
     }
-  };
+  };//
 
   // ===== MOCK DATA =====
   // These would be replaced with API calls in a production environment
@@ -76,7 +76,7 @@
   // Updated bookings array with user information
   // Add this to your existing code where the bookings array is defined
 
-  const bookings = [
+  let bookings = [
     {
       id: 101,
       resourceId: 1,
@@ -148,7 +148,7 @@
     }
   ];
 
-  const bookedSlots = [
+  let bookedSlots = [
     { resourceId: 1, date: getDateString(0), startTime: "09:00", endTime: "11:00" }, // Today
     { resourceId: 1, date: getDateString(0), startTime: "14:00", endTime: "15:00" }, // Today
     { resourceId: 1, date: getDateString(1), startTime: "11:00", endTime: "13:00" }, // Tomorrow 
@@ -278,26 +278,92 @@
     userDiscount: 0,
     isAdmin: false,
 
-    // Initialize user from hidden inputs
+    // Locked mode property - set once and never changes
+    initialMode: null,
+
+    // Mode detection using locked mode
+    getUserMode: function () {
+      // If we've already determined the initial mode, use that
+      if (this.initialMode) {
+        return this.initialMode;
+      }
+
+      // Otherwise, determine it now and lock it in
+      if (this.isAdmin) {
+        this.initialMode = 'admin';
+      } else if (this.hasUserEmail()) {
+        this.initialMode = 'user';
+      } else {
+        this.initialMode = 'guest';
+      }
+
+      return this.initialMode;
+    },
+
+    // Initialize user from hidden inputs AND URL parameters
     initializeUser: function () {
-      this.userEmail = document.getElementById('user-email').value || '';
-      this.userName = document.getElementById('user-name').value || '';
-      this.userDiscount = parseFloat(document.getElementById('user-discount').value || '0');
-      this.isAdmin = document.getElementById('is-admin').value === 'true';
+      // Get data from hidden inputs with null checks
+      const emailInput = document.getElementById('user-email');
+      const nameInput = document.getElementById('user-name');
+      const phoneInput = document.getElementById('user-phone');
+      const discountInput = document.getElementById('user-discount');
+      const adminInput = document.getElementById('is-admin');
+
+      this.userEmail = emailInput ? emailInput.value : '';
+      this.userName = nameInput ? nameInput.value : '';
+      this.userPhone = phoneInput ? phoneInput.value : '';
+      this.userDiscount = parseFloat(discountInput ? discountInput.value : '0') || 0;
+      this.isAdmin = adminInput ? adminInput.value === 'true' : false;
+
+      // Override with URL parameters if provided
+      const urlParams = this.getUrlParameters();
+      if (urlParams.email) this.userEmail = urlParams.email;
+      if (urlParams.name) this.userName = urlParams.name;
+      if (urlParams.phone) this.userPhone = urlParams.phone;
+      if (urlParams.discount) this.userDiscount = parseFloat(urlParams.discount);
+      if (urlParams.admin) this.isAdmin = urlParams.admin === 'true';
+
+      // IMPORTANT: Lock in the mode based on initial state
+      this.initialMode = null; // Reset first
+      const mode = this.getUserMode(); // This will set and lock the mode
+
+      // Clear bookings cache when user changes
+      this.dataLoaded.bookings = false;
 
       console.log('User initialized:', {
         email: this.userEmail,
         name: this.userName,
+        phone: this.userPhone,
         discount: this.userDiscount,
-        isAdmin: this.isAdmin
+        isAdmin: this.isAdmin,
+        mode: mode,
+        lockedMode: this.initialMode,
+        source: urlParams.email ? 'URL parameters' : 'hidden inputs'
       });
 
       setupDiscountBanner();
     },
 
+    // Extract URL parameters
+    getUrlParameters: function () {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        email: params.get('email') || params.get('userEmail'),
+        name: params.get('name') || params.get('userName') || params.get('fullName'),
+        phone: params.get('phone') || params.get('phoneNumber') || params.get('userPhone'),
+        discount: params.get('discount') || params.get('userDiscount'),
+        admin: params.get('admin') || params.get('isAdmin')
+      };
+    },
+
     // Check if user email is provided
     hasUserEmail: function () {
       return this.userEmail !== '';
+    },
+
+    // Check if we have complete user details
+    hasCompleteUserDetails: function () {
+      return this.userEmail !== '' && this.userName !== '' && this.userPhone !== '';
     },
 
     // Set user details from form
@@ -313,7 +379,8 @@
         name: this.userName,
         phone: this.userPhone,
         discount: this.userDiscount,
-        isNewUser: this.isNewUser
+        isNewUser: this.isNewUser,
+        lockedMode: this.initialMode // Show locked mode, not current derived mode
       });
     },
 
@@ -354,6 +421,13 @@
       this.bookingReference = null;
       this.paymentReference = null;
     },
+
+    // Add this property:
+    dataLoaded: {
+      resources: false,
+      bookedSlots: false,
+      bookings: false
+    }
   };
 
   // ===== DOM MANIPULATION HELPERS =====
@@ -668,7 +742,7 @@
       LoadingManager.showSkeletonLoader(resourcesContainer, 'rect', 3);
 
       // Use the API module to fetch resources
-      API.fetchResources()
+      API.fetchResourcesAndSlots()
         .then(fetchedResources => {
           // Hide skeleton loaders
           LoadingManager.hideSkeletonLoader(resourcesContainer);
@@ -725,25 +799,12 @@
 
             resourcesContainer.appendChild(card);
 
-            // Debug: Check if resource has carousel images
-            console.log('Resource:', resource.name, 'has picsCarousel:', resource.carouselImages);
-
             // Add event listener for image carousel
             const cardImage = card.querySelector('.card-image');
-            console.log('Found cardImage element:', cardImage);
-
             if (cardImage && resource.carouselImages && resource.carouselImages.length > 0) {
-              console.log('Adding click listener for:', resource.name);
               cardImage.addEventListener('click', function (event) {
-                console.log('Image clicked for:', resource.name);
                 event.stopPropagation();
                 ImageCarousel.open(resource);
-              });
-            } else {
-              console.log('NOT adding click listener because:', {
-                hasCardImage: !!cardImage,
-                hasPicsCarousel: !!resource.carouselImages,
-                carouselLength: resource.carouselImages ? resource.carouselImages.length : 0
               });
             }
 
@@ -754,7 +815,6 @@
                 BookingModal.open(resource.id);
               });
             }
-
 
           });
         })
@@ -806,6 +866,8 @@
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
+        console.log('Bookings:', bookings);
+
         let filteredBookings = bookings.filter(booking => {
           const bookingDate = new Date(booking.date);
           bookingDate.setHours(0, 0, 0, 0);
@@ -817,15 +879,17 @@
           }
         });
 
-        // Additional filtering based on user role
-        if (!AppState.isAdmin) {
-          // Non-admin users only see their own bookings
-          filteredBookings = filteredBookings.filter(booking => {
-            // Check if booking has userDetails with matching email
-            return booking.userDetails &&
-              booking.userDetails.email === AppState.userEmail;
-          });
-        }
+        console.log('Filtered bookings:', filteredBookings);
+
+        // // Additional filtering based on user role
+        // if (!AppState.isAdmin) {
+        //   // Non-admin users only see their own bookings
+        //   filteredBookings = filteredBookings.filter(booking => {
+        //     // Check if booking has userDetails with matching email
+        //     return booking.userDetails &&
+        //       booking.userDetails.email === AppState.userEmail;
+        //   });
+        // } //OLD FROM OLD CHECKS
 
         // Display message if no bookings
         if (filteredBookings.length === 0) {
@@ -953,6 +1017,79 @@
           }
         });
       }, 800);
+    },
+
+    showBookingSkeletons: () => {
+      const bookingsList = DOM.byId('bookings-list');
+      if (!bookingsList) return;
+
+      bookingsList.innerHTML = '';
+
+      for (let i = 0; i < 4; i++) {
+        const skeletonCard = document.createElement('div');
+        skeletonCard.className = 'booking-card skeleton-booking';
+
+        skeletonCard.innerHTML = `
+      <div class="skeleton-booking-header">
+        <div class="skeleton-line skeleton-title"></div>
+        <div class="skeleton-badge"></div>
+      </div>
+      <div class="skeleton-booking-details">
+        <div class="skeleton-detail">
+          <div class="skeleton-icon"></div>
+          <div class="skeleton-line skeleton-text"></div>
+        </div>
+        <div class="skeleton-detail">
+          <div class="skeleton-icon"></div>
+          <div class="skeleton-line skeleton-text"></div>
+        </div>
+      </div>
+    `;
+
+        bookingsList.appendChild(skeletonCard);
+      }
+
+      if (!document.getElementById('booking-skeleton-styles')) {
+        const skeletonStyles = document.createElement('style');
+        skeletonStyles.id = 'booking-skeleton-styles';
+        skeletonStyles.textContent = `
+      .skeleton-booking {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        animation: skeleton-pulse 1.5s ease-in-out infinite alternate;
+      }
+      .skeleton-booking-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+      }
+      .skeleton-booking-details {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+      .skeleton-detail {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
+      .skeleton-line {
+        background: #e9ecef;
+        border-radius: 4px;
+        height: 1rem;
+      }
+      .skeleton-title { width: 60%; height: 1.25rem; }
+      .skeleton-text { width: 45%; }
+      .skeleton-badge { width: 80px; height: 24px; background: #e9ecef; border-radius: 12px; }
+      .skeleton-icon { width: 16px; height: 16px; background: #e9ecef; border-radius: 2px; }
+      @keyframes skeleton-pulse { 0% { opacity: 1; } 100% { opacity: 0.6; } }
+    `;
+        document.head.appendChild(skeletonStyles);
+      }
     },
 
     // Time visualization
@@ -1112,14 +1249,12 @@
 
   // Function to handle the welcome banner
   function setupWelcomeBanner() {
-    // First, create and add the welcome banner container to the page if it doesn't exist
     let welcomeBanner = document.getElementById('welcome-banner');
     if (!welcomeBanner) {
       welcomeBanner = document.createElement('div');
       welcomeBanner.id = 'welcome-banner';
       welcomeBanner.className = 'welcome-banner';
 
-      // Insert at the top of the main content
       const mainContent = document.querySelector('.main-content');
       if (mainContent) {
         mainContent.insertBefore(welcomeBanner, mainContent.firstChild);
@@ -1128,12 +1263,13 @@
       }
     }
 
-    // Update the banner content based on user state
+    const mode = AppState.getUserMode();
+
     if (AppState.isAdmin) {
       welcomeBanner.innerHTML = `
       <div class="banner-content admin-banner">
         <i class="fas fa-shield-alt"></i>
-        <span>Admin Mode</span>
+        <span>Admin Mode - Managing All Bookings</span>
       </div>
     `;
       welcomeBanner.style.display = 'block';
@@ -1146,430 +1282,464 @@
     `;
       welcomeBanner.style.display = 'block';
     } else {
-      welcomeBanner.style.display = 'none';
+      welcomeBanner.innerHTML = `
+      <div class="banner-content guest-banner">
+        <i class="fas fa-user-secret"></i>
+        <span>Guest Mode - Bookings stored locally</span>
+      </div>
+    `;
+      welcomeBanner.style.display = 'block';
     }
   }
 
-// ===== IMAGE CAROUSEL MODULE WITH SWIPE SUPPORT =====
-const ImageCarousel = {
-  currentIndex: 0,
-  images: [],
-  resourceName: '',
-  // Swipe properties
-  startX: 0,
-  currentX: 0,
-  isDragging: false,
-  threshold: 50, // Minimum distance for swipe
+  // Add CSS styles for mode indicators
+  const modeStyles = document.createElement('style');
+  modeStyles.textContent = `
+  .guest-banner {
+    background-color: #f3f4f6 !important;
+    color: #6b7280 !important;
+  }
+  
+  .guest-info {
+    color: #6b7280;
+    font-style: italic;
+  }
+  
+  .guest-info i {
+    color: #9ca3af;
+  }
+  
+  .admin-info {
+    color: #7c3aed;
+    font-size: 0.875rem;
+  }
+  
+  .admin-info i {
+    color: #8b5cf6;
+  }
+`;
+  document.head.appendChild(modeStyles);
 
-  /**
-   * Open carousel with resource images
-   * @param {Object} resource - Resource object with carouselImages array
-   */
-  open: function (resource) {
-    if (!resource.carouselImages || resource.carouselImages.length === 0) {
-      console.warn('No carousel images found for resource');
-      return;
-    }
+  // ===== IMAGE CAROUSEL MODULE WITH SWIPE SUPPORT =====
+  const ImageCarousel = {
+    currentIndex: 0,
+    images: [],
+    resourceName: '',
+    // Swipe properties
+    startX: 0,
+    currentX: 0,
+    isDragging: false,
+    threshold: 50, // Minimum distance for swipe
 
-    this.images = resource.carouselImages;
-    this.resourceName = resource.name;
-    this.currentIndex = 0;
-
-    // Update modal title
-    const carouselTitle = DOM.byId('carousel-title');
-    if (carouselTitle) {
-      carouselTitle.textContent = `${this.resourceName} - Images`;
-    }
-
-    // Generate images
-    this.generateImages();
-
-    // Generate indicators
-    this.generateIndicators();
-
-    // Setup swipe listeners
-    this.setupSwipeListeners();
-
-    // Update display
-    this.updateDisplay();
-
-    // Show modal
-    const modal = DOM.byId('image-carousel-modal');
-    if (modal) {
-      DOM.addClass(modal, 'active');
-      document.body.style.overflow = 'hidden';
-    }
-  },
-
-  /**
-   * Close carousel modal
-   */
-  hide: function () {
-    const modal = DOM.byId('image-carousel-modal');
-    if (modal) {
-      DOM.removeClass(modal, 'active');
-      document.body.style.overflow = '';
-    }
-    
-    // Remove swipe listeners
-    this.removeSwipeListeners();
-  },
-
-  /**
-   * Generate image elements
-   */
-  generateImages: function () {
-    const container = DOM.byId('carousel-images');
-    if (!container) return;
-
-    container.innerHTML = '';
-
-    this.images.forEach((imageUrl, index) => {
-      const img = document.createElement('img');
-      img.className = 'carousel-image';
-      img.src = imageUrl; // Use the URL as-is
-      img.alt = `${this.resourceName} - Image ${index + 1}`;
-      img.loading = index === 0 ? 'eager' : 'lazy';
-      img.draggable = false; // Prevent default image dragging
-
-      container.appendChild(img);
-    });
-  },
-
-  /**
-   * Generate indicator dots
-   */
-  generateIndicators: function () {
-    const container = DOM.byId('carousel-indicators');
-    if (!container) return;
-
-    container.innerHTML = '';
-
-    this.images.forEach((_, index) => {
-      const indicator = document.createElement('div');
-      indicator.className = 'carousel-indicator';
-      if (index === 0) {
-        DOM.addClass(indicator, 'active');
+    /**
+     * Open carousel with resource images
+     * @param {Object} resource - Resource object with carouselImages array
+     */
+    open: function (resource) {
+      if (!resource.carouselImages || resource.carouselImages.length === 0) {
+        console.warn('No carousel images found for resource');
+        return;
       }
 
-      indicator.addEventListener('click', () => {
-        this.goToSlide(index);
+      this.images = resource.carouselImages;
+      this.resourceName = resource.name;
+      this.currentIndex = 0;
+
+      // Update modal title
+      const carouselTitle = DOM.byId('carousel-title');
+      if (carouselTitle) {
+        carouselTitle.textContent = `${this.resourceName} - Images`;
+      }
+
+      // Generate images
+      this.generateImages();
+
+      // Generate indicators
+      this.generateIndicators();
+
+      // Setup swipe listeners
+      this.setupSwipeListeners();
+
+      // Update display
+      this.updateDisplay();
+
+      // Show modal
+      const modal = DOM.byId('image-carousel-modal');
+      if (modal) {
+        DOM.addClass(modal, 'active');
+        document.body.style.overflow = 'hidden';
+      }
+    },
+
+    /**
+     * Close carousel modal
+     */
+    hide: function () {
+      const modal = DOM.byId('image-carousel-modal');
+      if (modal) {
+        DOM.removeClass(modal, 'active');
+        document.body.style.overflow = '';
+      }
+
+      // Remove swipe listeners
+      this.removeSwipeListeners();
+    },
+
+    /**
+     * Generate image elements
+     */
+    generateImages: function () {
+      const container = DOM.byId('carousel-images');
+      if (!container) return;
+
+      container.innerHTML = '';
+
+      this.images.forEach((imageUrl, index) => {
+        const img = document.createElement('img');
+        img.className = 'carousel-image';
+        img.src = imageUrl; // Use the URL as-is
+        img.alt = `${this.resourceName} - Image ${index + 1}`;
+        img.loading = index === 0 ? 'eager' : 'lazy';
+        img.draggable = false; // Prevent default image dragging
+
+        container.appendChild(img);
+      });
+    },
+
+    /**
+     * Generate indicator dots
+     */
+    generateIndicators: function () {
+      const container = DOM.byId('carousel-indicators');
+      if (!container) return;
+
+      container.innerHTML = '';
+
+      this.images.forEach((_, index) => {
+        const indicator = document.createElement('div');
+        indicator.className = 'carousel-indicator';
+        if (index === 0) {
+          DOM.addClass(indicator, 'active');
+        }
+
+        indicator.addEventListener('click', () => {
+          this.goToSlide(index);
+        });
+
+        container.appendChild(indicator);
+      });
+    },
+
+    /**
+     * Navigate to specific slide
+     * @param {number} index - Target slide index
+     */
+    goToSlide: function (index) {
+      if (index < 0 || index >= this.images.length) return;
+
+      this.currentIndex = index;
+      this.updateDisplay();
+    },
+
+    /**
+     * Navigate to previous slide
+     */
+    prevSlide: function () {
+      const newIndex = this.currentIndex > 0 ? this.currentIndex - 1 : this.images.length - 1;
+      this.goToSlide(newIndex);
+    },
+
+    /**
+     * Navigate to next slide
+     */
+    nextSlide: function () {
+      const newIndex = this.currentIndex < this.images.length - 1 ? this.currentIndex + 1 : 0;
+      this.goToSlide(newIndex);
+    },
+
+    /**
+     * Update carousel display based on current index
+     */
+    updateDisplay: function () {
+      // Update images transform
+      const imagesContainer = DOM.byId('carousel-images');
+      if (imagesContainer) {
+        const translateX = -this.currentIndex * 100;
+        imagesContainer.style.transform = `translateX(${translateX}%)`;
+      }
+
+      // Update indicators
+      const indicators = document.querySelectorAll('.carousel-indicator');
+      indicators.forEach((indicator, index) => {
+        if (index === this.currentIndex) {
+          DOM.addClass(indicator, 'active');
+        } else {
+          DOM.removeClass(indicator, 'active');
+        }
       });
 
-      container.appendChild(indicator);
-    });
-  },
-
-  /**
-   * Navigate to specific slide
-   * @param {number} index - Target slide index
-   */
-  goToSlide: function (index) {
-    if (index < 0 || index >= this.images.length) return;
-
-    this.currentIndex = index;
-    this.updateDisplay();
-  },
-
-  /**
-   * Navigate to previous slide
-   */
-  prevSlide: function () {
-    const newIndex = this.currentIndex > 0 ? this.currentIndex - 1 : this.images.length - 1;
-    this.goToSlide(newIndex);
-  },
-
-  /**
-   * Navigate to next slide
-   */
-  nextSlide: function () {
-    const newIndex = this.currentIndex < this.images.length - 1 ? this.currentIndex + 1 : 0;
-    this.goToSlide(newIndex);
-  },
-
-  /**
-   * Update carousel display based on current index
-   */
-  updateDisplay: function () {
-    // Update images transform
-    const imagesContainer = DOM.byId('carousel-images');
-    if (imagesContainer) {
-      const translateX = -this.currentIndex * 100;
-      imagesContainer.style.transform = `translateX(${translateX}%)`;
-    }
-
-    // Update indicators
-    const indicators = document.querySelectorAll('.carousel-indicator');
-    indicators.forEach((indicator, index) => {
-      if (index === this.currentIndex) {
-        DOM.addClass(indicator, 'active');
-      } else {
-        DOM.removeClass(indicator, 'active');
+      // Update counter
+      const counter = DOM.byId('carousel-counter');
+      if (counter) {
+        counter.textContent = `${this.currentIndex + 1} / ${this.images.length}`;
       }
-    });
+    },
 
-    // Update counter
-    const counter = DOM.byId('carousel-counter');
-    if (counter) {
-      counter.textContent = `${this.currentIndex + 1} / ${this.images.length}`;
-    }
-  },
+    /**
+     * Setup swipe/touch listeners
+     */
+    setupSwipeListeners: function () {
+      const container = DOM.byId('carousel-images');
+      if (!container) return;
 
-  /**
-   * Setup swipe/touch listeners
-   */
-  setupSwipeListeners: function () {
-    const container = DOM.byId('carousel-images');
-    if (!container) return;
+      // Touch events
+      container.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: true });
+      container.addEventListener('touchmove', this.handleTouchMove.bind(this), { passive: false });
+      container.addEventListener('touchend', this.handleTouchEnd.bind(this), { passive: true });
 
-    // Touch events
-    container.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: true });
-    container.addEventListener('touchmove', this.handleTouchMove.bind(this), { passive: false });
-    container.addEventListener('touchend', this.handleTouchEnd.bind(this), { passive: true });
+      // Mouse events for desktop
+      container.addEventListener('mousedown', this.handleMouseDown.bind(this));
+      container.addEventListener('mousemove', this.handleMouseMove.bind(this));
+      container.addEventListener('mouseup', this.handleMouseUp.bind(this));
+      container.addEventListener('mouseleave', this.handleMouseUp.bind(this));
+    },
 
-    // Mouse events for desktop
-    container.addEventListener('mousedown', this.handleMouseDown.bind(this));
-    container.addEventListener('mousemove', this.handleMouseMove.bind(this));
-    container.addEventListener('mouseup', this.handleMouseUp.bind(this));
-    container.addEventListener('mouseleave', this.handleMouseUp.bind(this));
-  },
+    /**
+     * Remove swipe listeners
+     */
+    removeSwipeListeners: function () {
+      const container = DOM.byId('carousel-images');
+      if (!container) return;
 
-  /**
-   * Remove swipe listeners
-   */
-  removeSwipeListeners: function () {
-    const container = DOM.byId('carousel-images');
-    if (!container) return;
+      container.removeEventListener('touchstart', this.handleTouchStart.bind(this));
+      container.removeEventListener('touchmove', this.handleTouchMove.bind(this));
+      container.removeEventListener('touchend', this.handleTouchEnd.bind(this));
+      container.removeEventListener('mousedown', this.handleMouseDown.bind(this));
+      container.removeEventListener('mousemove', this.handleMouseMove.bind(this));
+      container.removeEventListener('mouseup', this.handleMouseUp.bind(this));
+      container.removeEventListener('mouseleave', this.handleMouseUp.bind(this));
+    },
 
-    container.removeEventListener('touchstart', this.handleTouchStart.bind(this));
-    container.removeEventListener('touchmove', this.handleTouchMove.bind(this));
-    container.removeEventListener('touchend', this.handleTouchEnd.bind(this));
-    container.removeEventListener('mousedown', this.handleMouseDown.bind(this));
-    container.removeEventListener('mousemove', this.handleMouseMove.bind(this));
-    container.removeEventListener('mouseup', this.handleMouseUp.bind(this));
-    container.removeEventListener('mouseleave', this.handleMouseUp.bind(this));
-  },
+    /**
+     * Touch start handler
+     */
+    handleTouchStart: function (e) {
+      this.startX = e.touches[0].clientX;
+      this.isDragging = true;
+    },
 
-  /**
-   * Touch start handler
-   */
-  handleTouchStart: function (e) {
-    this.startX = e.touches[0].clientX;
-    this.isDragging = true;
-  },
+    /**
+     * Touch move handler
+     */
+    handleTouchMove: function (e) {
+      if (!this.isDragging) return;
 
-  /**
-   * Touch move handler
-   */
-  handleTouchMove: function (e) {
-    if (!this.isDragging) return;
-    
-    e.preventDefault(); // Prevent scrolling
-    this.currentX = e.touches[0].clientX;
-  },
+      e.preventDefault(); // Prevent scrolling
+      this.currentX = e.touches[0].clientX;
+    },
 
-  /**
-   * Touch end handler
-   */
-  handleTouchEnd: function (e) {
-    if (!this.isDragging) return;
-    
-    this.isDragging = false;
-    this.handleSwipe();
-  },
+    /**
+     * Touch end handler
+     */
+    handleTouchEnd: function (e) {
+      if (!this.isDragging) return;
 
-  /**
-   * Mouse down handler
-   */
-  handleMouseDown: function (e) {
-    this.startX = e.clientX;
-    this.isDragging = true;
-    e.preventDefault(); // Prevent text selection
-  },
+      this.isDragging = false;
+      this.handleSwipe();
+    },
 
-  /**
-   * Mouse move handler
-   */
-  handleMouseMove: function (e) {
-    if (!this.isDragging) return;
-    
-    this.currentX = e.clientX;
-  },
+    /**
+     * Mouse down handler
+     */
+    handleMouseDown: function (e) {
+      this.startX = e.clientX;
+      this.isDragging = true;
+      e.preventDefault(); // Prevent text selection
+    },
 
-  /**
-   * Mouse up handler
-   */
-  handleMouseUp: function (e) {
-    if (!this.isDragging) return;
-    
-    this.isDragging = false;
-    this.handleSwipe();
-  },
+    /**
+     * Mouse move handler
+     */
+    handleMouseMove: function (e) {
+      if (!this.isDragging) return;
 
-  /**
-   * Handle swipe logic
-   */
-  handleSwipe: function () {
-    const deltaX = this.currentX - this.startX;
-    
-    if (Math.abs(deltaX) > this.threshold) {
-      if (deltaX > 0) {
-        // Swiped right - go to previous slide
-        this.prevSlide();
-      } else {
-        // Swiped left - go to next slide
-        this.nextSlide();
+      this.currentX = e.clientX;
+    },
+
+    /**
+     * Mouse up handler
+     */
+    handleMouseUp: function (e) {
+      if (!this.isDragging) return;
+
+      this.isDragging = false;
+      this.handleSwipe();
+    },
+
+    /**
+     * Handle swipe logic
+     */
+    handleSwipe: function () {
+      const deltaX = this.currentX - this.startX;
+
+      if (Math.abs(deltaX) > this.threshold) {
+        if (deltaX > 0) {
+          // Swiped right - go to previous slide
+          this.prevSlide();
+        } else {
+          // Swiped left - go to next slide
+          this.nextSlide();
+        }
+      }
+
+      // Reset values
+      this.startX = 0;
+      this.currentX = 0;
+    },
+
+    /**
+     * Handle keyboard navigation
+     * @param {KeyboardEvent} event - Keyboard event
+     */
+    handleKeyboard: function (event) {
+      const modal = DOM.byId('image-carousel-modal');
+      if (!modal || !modal.classList.contains('active')) return;
+
+      switch (event.key) {
+        case 'ArrowLeft':
+          event.preventDefault();
+          this.prevSlide();
+          break;
+        case 'ArrowRight':
+          event.preventDefault();
+          this.nextSlide();
+          break;
+        case 'Escape':
+          event.preventDefault();
+          this.hide();
+          break;
       }
     }
-    
-    // Reset values
-    this.startX = 0;
-    this.currentX = 0;
-  },
+  };
 
-  /**
-   * Handle keyboard navigation
-   * @param {KeyboardEvent} event - Keyboard event
-   */
-  handleKeyboard: function (event) {
-    const modal = DOM.byId('image-carousel-modal');
-    if (!modal || !modal.classList.contains('active')) return;
+  // ===== SMOOTH DISCOUNT BANNER MODULE =====
+  const DiscountBanner = {
+    hideTimeout: null,
 
-    switch (event.key) {
-      case 'ArrowLeft':
-        event.preventDefault();
-        this.prevSlide();
-        break;
-      case 'ArrowRight':
-        event.preventDefault();
-        this.nextSlide();
-        break;
-      case 'Escape':
-        event.preventDefault();
-        this.hide();
-        break;
-    }
-  }
-};
+    /**
+     * Show discount banner with confetti
+     * @param {number} discountPercent - Discount percentage (e.g., 10 for 10%)
+     */
+    show: function (discountPercent) {
+      const banner = DOM.byId('discount-banner');
+      const discountAmount = DOM.byId('discount-amount');
 
-// ===== SMOOTH DISCOUNT BANNER MODULE =====
-const DiscountBanner = {
-  hideTimeout: null,
+      if (!banner || !discountAmount) return;
 
-  /**
-   * Show discount banner with confetti
-   * @param {number} discountPercent - Discount percentage (e.g., 10 for 10%)
-   */
-  show: function(discountPercent) {
-    const banner = DOM.byId('discount-banner');
-    const discountAmount = DOM.byId('discount-amount');
-    
-    if (!banner || !discountAmount) return;
-    
-    // Clear any existing hide timeout
-    if (this.hideTimeout) {
-      clearTimeout(this.hideTimeout);
-      this.hideTimeout = null;
-    }
-    
-    // Update discount percentage
-    discountAmount.textContent = `${discountPercent}%`;
-    
-    // Remove hiding class if it exists
-    DOM.removeClass(banner, 'hiding');
-    
-    // Show banner with smooth animation
-    DOM.addClass(banner, 'show');
-    document.body.classList.add('has-discount-banner');
-    
-    // Trigger confetti
-    this.createConfetti(banner);
-    
-    // Auto-hide after 8 seconds
-    this.hideTimeout = setTimeout(() => {
-      this.hide();
-    }, 8000);
-  },
+      // Clear any existing hide timeout
+      if (this.hideTimeout) {
+        clearTimeout(this.hideTimeout);
+        this.hideTimeout = null;
+      }
 
-  /**
-   * Hide discount banner smoothly
-   */
-  hide: function() {
-    const banner = DOM.byId('discount-banner');
-    if (!banner) return;
-    
-    // Clear timeout if called manually
-    if (this.hideTimeout) {
-      clearTimeout(this.hideTimeout);
-      this.hideTimeout = null;
-    }
-    
-    // Add hiding class for smooth exit animation
-    DOM.addClass(banner, 'hiding');
-    DOM.removeClass(banner, 'show');
-    
-    // Remove from body class and completely hide after animation
-    setTimeout(() => {
-      document.body.classList.remove('has-discount-banner');
+      // Update discount percentage
+      discountAmount.textContent = `${discountPercent}%`;
+
+      // Remove hiding class if it exists
       DOM.removeClass(banner, 'hiding');
-    }, 800); // Match the CSS transition duration
-  },
 
-  /**
-   * Create confetti animation
-   * @param {HTMLElement} container - Container element for confetti
-   */
-  createConfetti: function(container) {
-    const confettiCount = 30;
-    
-    for (let i = 0; i < confettiCount; i++) {
+      // Show banner with smooth animation
+      DOM.addClass(banner, 'show');
+      document.body.classList.add('has-discount-banner');
+
+      // Trigger confetti
+      this.createConfetti(banner);
+
+      // Auto-hide after 8 seconds
+      this.hideTimeout = setTimeout(() => {
+        this.hide();
+      }, 8000);
+    },
+
+    /**
+     * Hide discount banner smoothly
+     */
+    hide: function () {
+      const banner = DOM.byId('discount-banner');
+      if (!banner) return;
+
+      // Clear timeout if called manually
+      if (this.hideTimeout) {
+        clearTimeout(this.hideTimeout);
+        this.hideTimeout = null;
+      }
+
+      // Add hiding class for smooth exit animation
+      DOM.addClass(banner, 'hiding');
+      DOM.removeClass(banner, 'show');
+
+      // Remove from body class and completely hide after animation
       setTimeout(() => {
-        const confetti = document.createElement('div');
-        confetti.className = 'confetti';
-        
-        // Random horizontal position
-        confetti.style.left = Math.random() * 100 + '%';
-        
-        // Random animation delay
-        confetti.style.animationDelay = Math.random() * 2 + 's';
-        
-        // Random animation duration
-        confetti.style.animationDuration = (Math.random() * 2 + 2) + 's';
-        
-        container.appendChild(confetti);
-        
-        // Remove confetti after animation
+        document.body.classList.remove('has-discount-banner');
+        DOM.removeClass(banner, 'hiding');
+      }, 800); // Match the CSS transition duration
+    },
+
+    /**
+     * Create confetti animation
+     * @param {HTMLElement} container - Container element for confetti
+     */
+    createConfetti: function (container) {
+      const confettiCount = 30;
+
+      for (let i = 0; i < confettiCount; i++) {
         setTimeout(() => {
-          if (confetti.parentNode) {
-            confetti.parentNode.removeChild(confetti);
-          }
-        }, 4000);
-      }, i * 100); // Stagger the confetti creation
-    }
-  },
+          const confetti = document.createElement('div');
+          confetti.className = 'confetti';
 
-  /**
-   * Check user discount and show banner if applicable
-   */
-  checkAndShow: function() {
-    // Check if user has a discount
+          // Random horizontal position
+          confetti.style.left = Math.random() * 100 + '%';
+
+          // Random animation delay
+          confetti.style.animationDelay = Math.random() * 2 + 's';
+
+          // Random animation duration
+          confetti.style.animationDuration = (Math.random() * 2 + 2) + 's';
+
+          container.appendChild(confetti);
+
+          // Remove confetti after animation
+          setTimeout(() => {
+            if (confetti.parentNode) {
+              confetti.parentNode.removeChild(confetti);
+            }
+          }, 4000);
+        }, i * 100); // Stagger the confetti creation
+      }
+    },
+
+    /**
+     * Check user discount and show banner if applicable
+     */
+    checkAndShow: function () {
+      // Check if user has a discount
+      if (AppState.userDiscount && AppState.userDiscount > 0) {
+        console.log(`User has ${AppState.userDiscount}% discount - showing banner`);
+        this.show(AppState.userDiscount);
+      }
+    }
+  };
+
+  // Add this to your existing setupWelcomeBanner function or create a new initialization function
+  function setupDiscountBanner() {
+    // Check for discount after user is initialized
     if (AppState.userDiscount && AppState.userDiscount > 0) {
-      console.log(`User has ${AppState.userDiscount}% discount - showing banner`);
-      this.show(AppState.userDiscount);
+      // Small delay to let the page load first
+      setTimeout(() => {
+        DiscountBanner.checkAndShow();
+      }, 1000);
     }
   }
-};
-
-// Add this to your existing setupWelcomeBanner function or create a new initialization function
-function setupDiscountBanner() {
-  // Check for discount after user is initialized
-  if (AppState.userDiscount && AppState.userDiscount > 0) {
-    // Small delay to let the page load first
-    setTimeout(() => {
-      DiscountBanner.checkAndShow();
-    }, 1000);
-  }
-}
 
   // ===== LOADING SCREENS & INDICATORS =====
 
@@ -1765,6 +1935,9 @@ function setupDiscountBanner() {
         return;
       }
 
+      BookingModal.cleanupModalContent();
+
+
       // Reset AppState references when opening new booking
       AppState.resetReferences();
 
@@ -1813,6 +1986,9 @@ function setupDiscountBanner() {
         DOM.removeClass(bookingModal, 'active');
         document.body.style.overflow = '';
       }
+
+      BookingModal.cleanupModalContent();
+
       AppState.resetReferences();
 
       // Reset submission locks
@@ -1825,6 +2001,21 @@ function setupDiscountBanner() {
           }
         }
       }
+    },
+
+    cleanupModalContent: () => {
+      const modalContent = document.querySelector('.modal-content');
+      if (!modalContent) return;
+
+      // Remove any dynamically created steps (receipt, identification forms, etc.)
+      const dynamicSteps = modalContent.querySelectorAll('#booking-receipt-step, #fixed-identification-step');
+      dynamicSteps.forEach(step => step.remove());
+
+      // Remove any injected styles for receipts
+      const injectedStyles = document.querySelectorAll('#receipt-styles, #partial-success-styles, #payment-instructions-styles');
+      injectedStyles.forEach(style => style.remove());
+
+      console.log('Modal content cleaned up');
     },
 
     resetState: () => {
@@ -3669,6 +3860,8 @@ function setupDiscountBanner() {
   function showReservationReceipt(bookingData) {
     // Get the container - this could be the booking modal content
     // or another designated area for the receipt
+
+    BookingModal.cleanupModalContent();
     const modalContent = document.querySelector('.modal-content');
     if (!modalContent) return;
 
@@ -4061,8 +4254,8 @@ function setupDiscountBanner() {
         closeBtn.addEventListener('click', () => {
           BookingModal.hide();
           // Refresh resources view
-          UI.renderResources();
-          // Also refresh bookings view in case user navigates there
+          // UI.renderResources();
+          // Also refresh bookings view in case user navigates there  
           UI.renderBookings();
         });
       }
@@ -4074,24 +4267,55 @@ function setupDiscountBanner() {
    * Uses data already formatted by formulateBookingRequest
    */
   function updateLocalBookingsData(bookingData) {
-    // The booking object is already properly formatted by formulateBookingRequest
-    // We just need to add a temporary ID for UI tracking
+    console.log('=== updateLocalBookingsData DEBUG ===');
+    console.log('bookingData:', bookingData);
+    console.log('AppState.initialMode:', AppState.initialMode);
+    console.log('About to check if initialMode === guest');
+
     const uiBooking = {
       ...bookingData,
-      id: Date.now() // Temporary ID until server assigns one
+      id: Date.now()
     };
+    console.log('uiBooking created:', uiBooking);
 
-    // Add to bookings array for UI
+    // Use the INITIAL/LOCKED mode, not current state
+    if (AppState.initialMode === 'guest') {
+      console.log('✅ GUEST MODE DETECTED - STORING IN COOKIES');
+
+      // Test if BookingStorage exists
+      console.log('BookingStorage object:', BookingStorage);
+      console.log('storeGuestBooking function:', BookingStorage.storeGuestBooking);
+
+      try {
+        const storedBooking = BookingStorage.storeGuestBooking(uiBooking);
+        console.log('✅ storeGuestBooking returned:', storedBooking);
+
+        // Verify it was stored
+        const retrievedBookings = BookingStorage.getGuestBookings();
+        console.log('✅ Retrieved bookings after storage:', retrievedBookings);
+
+        // Check raw cookies
+        console.log('✅ Raw document.cookie:', document.cookie);
+      } catch (error) {
+        console.error('❌ Error in storeGuestBooking:', error);
+      }
+    } else {
+      console.log('❌ NOT GUEST MODE - mode:', AppState.initialMode);
+    }
+
+    console.log('Adding to local bookings array...');
     bookings.push(uiBooking);
+    console.log('Local bookings array now has', bookings.length, 'items');
 
-    // Add to booked slots for availability calculation
     bookedSlots.push({
       resourceId: bookingData.resourceId,
       date: bookingData.date,
       startTime: bookingData.startTime,
       endTime: bookingData.endTime
     });
+    console.log('=== END updateLocalBookingsData DEBUG ===');
   }
+
 
   // Optional: Admin filter component for bookings view
   // Only add this if you want to enhance the admin experience
@@ -4312,7 +4536,14 @@ function setupDiscountBanner() {
       discountApplied: userDiscount || 0,
       paymentMethod: paymentMethodObj.id,
       paymentStatus: 'completed',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      bookedSlot: {
+        startTime: selectedTimeSlot.startTime,
+        resourceId: currentResourceId,
+        endTime: selectedTimeSlot.endTime,
+        duration: selectedTimeSlot.duration,
+        date: selectedTimeSlot.date,
+      }
     };
 
     console.log(resource)
@@ -5323,74 +5554,61 @@ function setupDiscountBanner() {
         hideToastOnSuccess = false,
         successMessage = 'Operation completed successfully',
         errorMessage = 'Operation failed. Please try again.',
-        preventDuplicateSubmission = true,  // Control submission locking
-        requestId = functionName  // Allow custom request ID for more granular control
+        preventDuplicateSubmission = true,
+        requestId = functionName
       } = options;
 
-      // Use specific request ID to track this particular request type
       const trackingId = requestId;
 
-      // Check for duplicate submission for this specific function
       if (preventDuplicateSubmission && this.activeRequests[trackingId]) {
         console.warn(`Preventing duplicate submission for: ${trackingId}`);
         return Promise.reject(new Error(`Request ${trackingId} already in progress`));
       }
 
-      // Set submission flag for this specific function
       if (preventDuplicateSubmission) {
         this.activeRequests[trackingId] = true;
         console.log(`Starting request: ${trackingId}`);
       }
 
       return new Promise((resolve, reject) => {
-        // Show loader if requested
         if (showLoader) {
           LoadingManager.showFullPageLoader(loaderTitle, loaderMessage);
         }
 
-        // Call the Google Apps Script function
         google.script.run
           .withSuccessHandler(function (response) {
-            // Hide loader if shown
             if (showLoader) {
               LoadingManager.hideFullPageLoader();
             }
 
-            // Show success toast if needed
             if (!hideToastOnSuccess) {
               Toast.show('success', successMessage);
             }
 
-            // Reset submission flag for this specific function
             if (preventDuplicateSubmission) {
               delete API.activeRequests[trackingId];
               console.log(`Completed request: ${trackingId}`);
             }
 
-            // Resolve with response
             resolve(response);
           })
           .withFailureHandler(function (error) {
             console.error(`API Error (${functionName}):`, error);
 
-            // Hide loader if shown
             if (showLoader) {
               LoadingManager.hideFullPageLoader();
             }
 
-            // Show error toast
             Toast.show('error', errorMessage);
 
-            // Reset submission flag for this specific function
             if (preventDuplicateSubmission) {
               delete API.activeRequests[trackingId];
               console.log(`Failed request: ${trackingId}`);
             }
 
-            // Reject with error
             reject(error);
           })
-        [functionName](data); // Call the specified function
+        [functionName](data);
       });
     },
 
@@ -5398,26 +5616,31 @@ function setupDiscountBanner() {
      * Fetch resources from the server
      * @returns {Promise} Promise that resolves with processed resources
      */
-    fetchResources: function () {
-      return this.request('fetchData', {}, {
-        requestId: 'fetchResources',  // Custom ID for tracking
+    fetchResourcesAndSlots: function () {
+      // Don't reload if already loaded
+      if (AppState.dataLoaded.resources && window.resources && window.resources.length > 0) {
+        console.log('Resources already loaded, using cached data');
+        return Promise.resolve(window.resources);
+      }
+
+      return this.request('fetchResourcesAndSlots', {}, {
+        requestId: 'fetchResources',
         loaderTitle: 'Loading Resources',
         loaderMessage: 'Fetching available resources...',
         hideToastOnSuccess: true,
         errorMessage: 'Failed to load resources. Please try again.',
-        showLoader: false // Don't show full page loader because we're using skeleton loaders
+        showLoader: false
       })
         .then(response => {
           try {
-            // Parse the response if it's a string
             const data = typeof response === 'string' ? JSON.parse(response) : response;
             console.log('Resources data loaded:', data);
 
-            // Handle different response formats
             if (Array.isArray(data)) {
+              window.resources = data;
+              AppState.dataLoaded.resources = true;
               return data;
             } else if (data && data.krooResourcesRooms) {
-              // Process resources data if it's in the nested format
               const processedResources = data.krooResourcesRooms.map(resource => ({
                 id: resource.id,
                 name: resource.name,
@@ -5427,22 +5650,23 @@ function setupDiscountBanner() {
                 location: resource.location || 'Not specified',
                 pricePerHour: resource.pricePerHour || 100,
                 carouselImages: resource.carouselImages || [],
-                resourceLabel: resource.resourceLabel || ""
+                resourceLabel: resource.resourceLabel || ''
               }));
 
               resources = processedResources;
-              console.log(resources);
-              // Resolve with processed data
+              bookedSlots = data.bookedSlots;
+              AppState.dataLoaded.resources = true;
+              AppState.dataLoaded.bookedSlots = true;
               return processedResources;
             } else {
               throw new Error('Invalid data format');
             }
           } catch (error) {
             console.error('Error processing resources data:', error);
-
-            // Fall back to mock data in development
-            if (window.resources) {
-              console.warn('Falling back to mock resources data');
+            if (window.resources && window.resources.length > 0) {
+              console.warn('Falling back to existing resources data');
+              AppState.dataLoaded.resources = true;
+              AppState.dataLoaded.bookedSlots = true;
               return window.resources;
             } else {
               throw error;
@@ -5450,9 +5674,10 @@ function setupDiscountBanner() {
           }
         })
         .catch(error => {
-          // Fall back to mock data in development
-          if (window.resources) {
-            console.warn('Falling back to mock resources data due to API error');
+          console.log(error)
+          if (window.resources && window.resources.length > 0) {
+            console.warn('Falling back to existing resources data due to API error');
+            AppState.dataLoaded.resources = true;
             return window.resources;
           } else {
             throw error;
@@ -5460,41 +5685,173 @@ function setupDiscountBanner() {
         });
     },
 
-    /**
-     * Fetch booked slots for a resource
-     * @param {number} resourceId - Resource ID
-     * @param {string} date - Date in YYYY-MM-DD format
-     * @returns {Promise} Promise that resolves with booked slots
-     */
-    fetchBookedSlots: function (resourceId, date) {
-      const requestId = `fetchBookedSlots_${resourceId}_${date}`;
+    fetchBookings: function () {
+      console.log('=== API.fetchBookings called ===');
+      console.log('AppState.initialMode:', AppState.initialMode);
+      console.log('Current bookings array length:', bookings.length);
 
-      return this.request('fetchBookedSlots', { resourceId, date }, {
-        requestId: requestId,
-        showLoader: false,
-        hideToastOnSuccess: true,
-        errorMessage: 'Failed to load booking data'
-      })
-        .then(response => {
-          // Parse the response if it's a string
-          const data = typeof response === 'string' ? JSON.parse(response) : response;
-          return data;
-        })
-        .catch(error => {
-          console.error('Error fetching booked slots:', error);
+      // GUEST MODE: Don't fetch from database, use cookies only
+      if (AppState.initialMode === 'guest') {
+        console.log('✅ GUEST MODE - Loading bookings from cookies');
 
-          // Fall back to mock data in development
-          if (window.bookedSlots) {
-            console.warn('Falling back to mock booked slots data');
-            const fallbackSlots = window.bookedSlots.filter(slot =>
-              slot.resourceId === resourceId &&
-              slot.date === date
-            );
-            return fallbackSlots;
-          } else {
-            throw error;
-          }
+        const bookingsView = DOM.byId('bookings-view');
+        if (bookingsView && bookingsView.style.display !== 'none') {
+          UI.showBookingSkeletons();
+        }
+
+        return new Promise(resolve => {
+          setTimeout(() => {
+            console.log('Getting guest bookings from cookies...');
+            const guestBookings = BookingStorage.getGuestBookings();
+            console.log('Guest bookings from cookies:', guestBookings);
+
+            // IMPORTANT: Update the global bookings array
+            bookings = guestBookings;
+            console.log('Updated global bookings array to:', bookings);
+
+            AppState.dataLoaded.bookings = true;
+
+            console.log(`✅ Loaded ${guestBookings.length} guest bookings from cookies`);
+
+            const currentBookingsView = DOM.byId('bookings-view');
+            if (currentBookingsView && currentBookingsView.style.display !== 'none') {
+              console.log('Calling UI.renderBookings()...');
+              UI.renderBookings();
+            }
+
+            resolve(guestBookings);
+          }, 500);
         });
+      }
+
+      // USER MODE: Fetch only user's bookings from database
+      if (AppState.initialMode === 'user') {
+        console.log('User mode: Fetching user bookings from database');
+
+        if (AppState.dataLoaded.bookings) {
+          console.log('User bookings already loaded, using cached data');
+          return Promise.resolve(bookings);
+        }
+
+        const bookingsView = DOM.byId('bookings-view');
+        if (bookingsView && bookingsView.style.display !== 'none') {
+          UI.showBookingSkeletons();
+        }
+
+        return this.request('fetchUserBookings', { userEmail: AppState.userEmail }, {
+          requestId: 'fetchUserBookings',
+          loaderTitle: 'Loading Your Bookings',
+          loaderMessage: 'Fetching your reservations...',
+          hideToastOnSuccess: true,
+          errorMessage: 'Failed to load your bookings. Please try again.',
+          showLoader: false
+        })
+          .then(response => {
+            try {
+              const data = typeof response === 'string' ? JSON.parse(response) : response;
+              console.log('User bookings data loaded:', data);
+
+              bookings = data.bookings || data || [];
+              AppState.dataLoaded.bookings = true;
+
+              console.log(`Loaded ${bookings.length} bookings for user: ${AppState.userEmail}`);
+
+              const currentBookingsView = DOM.byId('bookings-view');
+              if (currentBookingsView && currentBookingsView.style.display !== 'none') {
+                UI.renderBookings();
+              }
+
+              return bookings;
+            } catch (error) {
+              console.error('Error processing user bookings data:', error);
+              AppState.dataLoaded.bookings = true;
+
+              const currentBookingsView = DOM.byId('bookings-view');
+              if (currentBookingsView && currentBookingsView.style.display !== 'none') {
+                UI.renderBookings();
+              }
+
+              return bookings;
+            }
+          })
+          .catch(error => {
+            console.error('Error fetching user bookings:', error);
+            AppState.dataLoaded.bookings = true;
+
+            const currentBookingsView = DOM.byId('bookings-view');
+            if (currentBookingsView && currentBookingsView.style.display !== 'none') {
+              UI.renderBookings();
+            }
+
+            return bookings;
+          });
+      }
+
+      // ADMIN MODE: Fetch ALL bookings from database
+      if (AppState.initialMode === 'admin') {
+        console.log('Admin mode: Fetching all bookings from database');
+
+        if (AppState.dataLoaded.bookings) {
+          console.log('Admin bookings already loaded, using cached data');
+          return Promise.resolve(bookings);
+        }
+
+        const bookingsView = DOM.byId('bookings-view');
+        if (bookingsView && bookingsView.style.display !== 'none') {
+          UI.showBookingSkeletons();
+        }
+
+        return this.request('fetchAllBookings', {}, {
+          requestId: 'fetchAllBookings',
+          loaderTitle: 'Loading All Bookings',
+          loaderMessage: 'Fetching all reservations...',
+          hideToastOnSuccess: true,
+          errorMessage: 'Failed to load bookings. Please try again.',
+          showLoader: false
+        })
+          .then(response => {
+            try {
+              const data = typeof response === 'string' ? JSON.parse(response) : response;
+              console.log('Admin bookings data loaded:', data);
+
+              bookings = data.bookings || data || [];
+              AppState.dataLoaded.bookings = true;
+
+              console.log(`Loaded ${bookings.length} bookings for admin`);
+
+              const currentBookingsView = DOM.byId('bookings-view');
+              if (currentBookingsView && currentBookingsView.style.display !== 'none') {
+                UI.renderBookings();
+              }
+
+              return bookings;
+            } catch (error) {
+              console.error('Error processing admin bookings data:', error);
+              AppState.dataLoaded.bookings = true;
+
+              const currentBookingsView = DOM.byId('bookings-view');
+              if (currentBookingsView && currentBookingsView.style.display !== 'none') {
+                UI.renderBookings();
+              }
+
+              return bookings;
+            }
+          })
+          .catch(error => {
+            console.error('Error fetching admin bookings:', error);
+            AppState.dataLoaded.bookings = true;
+
+            const currentBookingsView = DOM.byId('bookings-view');
+            if (currentBookingsView && currentBookingsView.style.display !== 'none') {
+              UI.renderBookings();
+            }
+
+            return bookings;
+          });
+      }
+
+      console.log('No mode matched, returning empty array');
+      return Promise.resolve([]);
     },
 
     /**
@@ -5503,12 +5860,10 @@ function setupDiscountBanner() {
      * @returns {Promise} Promise resolving to booking with ID and reference
      */
     addToBuffer: function (bookingData) {
-      // Ensure booking has a reference number
       if (!bookingData.reference) {
         bookingData.reference = Utils.generateBookingReference();
       }
 
-      // Add timestamp if not present
       if (!bookingData.bufferTimestamp) {
         bookingData.bufferTimestamp = Date.now();
       }
@@ -5529,7 +5884,6 @@ function setupDiscountBanner() {
      * @param {object} bookingData - Booking data from buffer
      */
     addToDatabase: function (bookingData) {
-      // Add DB timestamp
       const dbBookingData = {
         ...bookingData,
         dbTimestamp: Date.now()
@@ -5537,12 +5891,11 @@ function setupDiscountBanner() {
 
       const requestId = `addBookingToDatabase_${bookingData.reference}`;
 
-      // Don't show loader but still prevent duplicate database operations
       return this.request('addBookingToDatabase', dbBookingData, {
         requestId: requestId,
         showLoader: false,
         hideToastOnSuccess: true,
-        preventDuplicateSubmission: true  // Prevent duplicates, but per booking
+        preventDuplicateSubmission: true
       })
         .then(response => {
           console.log('Booking added to database:', response);
@@ -5550,7 +5903,6 @@ function setupDiscountBanner() {
         })
         .catch(error => {
           console.error('Error adding booking to database:', error);
-          // Optionally implement retry logic here
           throw error;
         });
     },
@@ -5564,7 +5916,6 @@ function setupDiscountBanner() {
      * @returns {Promise} Promise resolving to verification result
      */
     verifyInstapayPayment: function (file, paymentReference, expectedAmount, verificationOptions) {
-      // Show loading on button (if calling from modal)
       const verifyButton = document.getElementById('verify-payment');
       if (verifyButton) {
         LoadingManager.showButtonLoader('#verify-payment');
@@ -5573,15 +5924,12 @@ function setupDiscountBanner() {
       const requestId = `verifyInstapayPayment_${paymentReference}`;
 
       return new Promise((resolve, reject) => {
-        // Convert file to base64 first
         const reader = new FileReader();
 
         reader.onload = (e) => {
           try {
-            // Get the base64 data without the prefix
             const base64Data = e.target.result.split(',')[1];
 
-            // Create data object to send to the server
             const dataToSend = {
               fileContent: base64Data,
               fileName: file.name,
@@ -5589,14 +5937,12 @@ function setupDiscountBanner() {
               fileSize: file.size,
               paymentReference: paymentReference,
               expectedAmount: expectedAmount,
-              // Include all verification options
               ...verificationOptions
             };
 
             console.log("Sending file:", file.name, "size:", file.size, "type:", file.type);
             console.log("With reference:", paymentReference, "expected amount:", expectedAmount);
 
-            // Use the existing request method
             this.request('processFullVerification', dataToSend, {
               requestId: requestId,
               loaderTitle: 'Verifying Payment',
@@ -5618,7 +5964,6 @@ function setupDiscountBanner() {
           reject(error);
         };
 
-        // Start reading the file as data URL
         reader.readAsDataURL(file);
       });
     },
@@ -5827,6 +6172,9 @@ function setupDiscountBanner() {
       // Render resources (this will now include its own loading indicators)
       UI.renderResources();
 
+      // ADD THIS LINE - Start loading bookings in parallel
+      API.fetchBookings();
+
       // Hide initial loading screen after a short delay
       setTimeout(() => {
         LoadingManager.hideFullPageLoader();
@@ -5840,4 +6188,291 @@ function setupDiscountBanner() {
     }
   });
 
+  // ===== PERFORMANCE METRICS (OPTIONAL) =====
+  const PerformanceTracker = {
+    startTime: Date.now(),
+
+    logPhase: function (phaseName) {
+      const elapsed = Date.now() - this.startTime;
+      console.log(`🚀 ${phaseName} completed in ${elapsed}ms`);
+    },
+
+    logAppReady: function () {
+      const elapsed = Date.now() - this.startTime;
+      console.log(`✅ App ready for use in ${elapsed}ms`);
+    }
+  };
+
+  // ===== COOKIE STORAGE UTILITIES =====
+
+  const CookieStorage = {
+    /**
+     * Set a cookie
+     * @param {string} name - Cookie name
+     * @param {string|object} value - Cookie value (will be JSON stringified if object)
+     * @param {number} days - Expiration in days (default: 30)
+     */
+    set: function (name, value, days = 30) {
+      try {
+        const stringValue = typeof value === 'object' ? JSON.stringify(value) : value;
+        const date = new Date();
+        date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+        const expires = "expires=" + date.toUTCString();
+
+        // Use the same cookie settings that work for you
+        const cookieString = `${name}=${stringValue};${expires};path=/;SameSite=none;secure`;
+
+        console.log('Setting cookie:', name);
+        console.log('Cookie string:', cookieString);
+        console.log('Value being stored:', value);
+
+        document.cookie = cookieString;
+
+        // Verify it was set
+        const verification = this.get(name);
+        console.log('Cookie verification after setting:', verification);
+
+        console.log(`Cookie set: ${name}`);
+      } catch (error) {
+        console.error('Error setting cookie:', error);
+      }
+    },
+
+    /**
+     * Get a cookie
+     * @param {string} name - Cookie name
+     * @param {boolean} parseJson - Whether to parse as JSON (default: false)
+     * @returns {string|object|null} Cookie value
+     */
+    get: function (name, parseJson = false) {
+      try {
+        const nameEQ = name + "=";
+        const cookies = document.cookie.split(';');
+
+        for (let i = 0; i < cookies.length; i++) {
+          let cookie = cookies[i];
+          while (cookie.charAt(0) === ' ') {
+            cookie = cookie.substring(1, cookie.length);
+          }
+          if (cookie.indexOf(nameEQ) === 0) {
+            const value = cookie.substring(nameEQ.length, cookie.length);
+            return parseJson ? JSON.parse(value) : value;
+          }
+        }
+        return null;
+      } catch (error) {
+        console.error('Error getting cookie:', error);
+        return null;
+      }
+    },
+
+    /**
+     * Delete a cookie
+     * @param {string} name - Cookie name
+     */
+    delete: function (name) {
+      // Use the same settings that work for setting cookies
+      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=none; secure`;
+      console.log(`Cookie deleted: ${name}`);
+    },
+
+    /**
+     * Check if a cookie exists
+     * @param {string} name - Cookie name
+     * @returns {boolean}
+     */
+    exists: function (name) {
+      return this.get(name) !== null;
+    }
+  };
+
+  // ===== BOOKING STORAGE =====
+
+  const BookingStorage = {
+    /**
+     * Store guest booking data in cookies
+     */
+    storeGuestBooking: function (bookingData) {
+      try {
+        const existingBookings = this.getGuestBookings();
+
+        const guestBooking = {
+          id: Date.now(),
+          reference: bookingData.reference,
+          resourceId: bookingData.resourceId,
+          resourceName: bookingData.resourceName,
+          date: bookingData.date,
+          startTime: bookingData.startTime,
+          endTime: bookingData.endTime,
+          price: bookingData.price,
+          paymentMethod: bookingData.paymentMethod,
+          paymentStatus: bookingData.paymentStatus || 'completed',
+          status: 'CONFIRMED',
+          userDetails: bookingData.userDetails,
+          createdAt: bookingData.createdAt || new Date().toISOString(),
+          timestamp: Date.now(),
+          isGuestBooking: true
+        };
+
+        existingBookings.push(guestBooking);
+
+        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+        const recentBookings = existingBookings.filter(booking =>
+          booking.timestamp > thirtyDaysAgo
+        );
+
+        const bookingsToStore = recentBookings.slice(-20);
+        CookieStorage.set('guest_bookings', bookingsToStore, 30);
+
+        console.log('Guest booking stored in cookie:', guestBooking.reference);
+        return guestBooking;
+      } catch (error) {
+        console.error('Error storing guest booking:', error);
+        return null;
+      }
+    },
+
+    getGuestBookings: function () {
+      try {
+        const bookings = CookieStorage.get('guest_bookings', true) || [];
+
+        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+        const validBookings = bookings.filter(booking =>
+          booking.timestamp > thirtyDaysAgo
+        );
+
+        if (validBookings.length !== bookings.length) {
+          CookieStorage.set('guest_bookings', validBookings, 30);
+        }
+
+        return validBookings;
+      } catch (error) {
+        console.error('Error getting guest bookings:', error);
+        return [];
+      }
+    },
+
+    updateGuestBookingStatus: function (bookingId, newStatus) {
+      try {
+        const bookings = this.getGuestBookings();
+        const bookingIndex = bookings.findIndex(b => b.id === parseInt(bookingId));
+
+        if (bookingIndex !== -1) {
+          bookings[bookingIndex].status = newStatus;
+          bookings[bookingIndex].updatedAt = new Date().toISOString();
+
+          CookieStorage.set('guest_bookings', bookings, 30);
+          console.log(`Guest booking ${bookingId} status updated to ${newStatus}`);
+          return true;
+        }
+
+        return false;
+      } catch (error) {
+        console.error('Error updating guest booking status:', error);
+        return false;
+      }
+    },
+
+    canCancelBooking: function (booking) {
+      if (!booking || booking.status === 'CANCELED' || booking.status === 'EXPIRED') {
+        return false;
+      }
+
+      const bookingEndTime = new Date(`${booking.date}T${booking.endTime}`);
+      const now = new Date();
+
+      return bookingEndTime > now;
+    },
+
+    clearGuestBookings: function () {
+      CookieStorage.delete('guest_bookings');
+      console.log('All guest bookings cleared');
+    },
+
+    // Keep existing methods
+    storeRecentBooking: function (bookingData) {
+      const bookingInfo = {
+        reference: bookingData.reference,
+        resourceName: bookingData.resourceName,
+        date: bookingData.date,
+        startTime: bookingData.startTime,
+        endTime: bookingData.endTime,
+        price: bookingData.price,
+        paymentMethod: bookingData.paymentMethod,
+        timestamp: Date.now()
+      };
+
+      CookieStorage.set('recent_booking', bookingInfo, 7);
+      console.log('Recent booking stored in cookie');
+    },
+
+    getRecentBooking: function () {
+      const booking = CookieStorage.get('recent_booking', true);
+
+      if (booking) {
+        const age = Date.now() - booking.timestamp;
+        const maxAge = 7 * 24 * 60 * 60 * 1000;
+
+        if (age < maxAge) {
+          return booking;
+        } else {
+          this.clearRecentBooking();
+          return null;
+        }
+      }
+
+      return null;
+    },
+
+    clearRecentBooking: function () {
+      CookieStorage.delete('recent_booking');
+    },
+
+    storeUserPreferences: function (preferences) {
+      CookieStorage.set('user_preferences', preferences, 365);
+    },
+
+    getUserPreferences: function () {
+      return CookieStorage.get('user_preferences', true) || {
+        preferredPaymentMethod: '',
+        rememberBookingDetails: true,
+        showTutorial: true
+      };
+    }
+  };
+
+  // Simple cookie test
+  // setTimeout(() => {
+  //   if (AppState.getUserMode() === 'guest') {
+  //     console.log('Testing cookie storage...');
+  //     // CookieStorage.set('test_cookie', 'test_value', 1);
+  //     // console.log('Basic cookie test result:', CookieStorage.get('test_cookie'));
+
+  //     const testBooking = {
+  //       id: 999999,
+  //       reference: 'TEST-123',
+  //       resourceName: 'Test Room',
+  //       date: '2025-01-01',
+  //       startTime: '10:00',
+  //       endTime: '11:00',
+  //       price: 100,
+  //       isGuestBooking: true
+  //     };
+
+  //     console.log('Storing test booking...');
+  //     const result = BookingStorage.storeGuestBooking(testBooking);
+  //     console.log('Store result:', result);
+
+  //     const retrieved = BookingStorage.getGuestBookings();
+  //     console.log('Retrieved bookings:', retrieved);
+
+  //     console.log('Raw cookies:', document.cookie);
+
+  //     // Test deletion
+  //     console.log('Testing deletion...');
+  //     BookingStorage.clearGuestBookings();
+  //     console.log('After deletion:', BookingStorage.getGuestBookings());
+  //     console.log('Raw cookies after deletion:', document.cookie);
+  //   }
+  // }, 2000);
 </script>

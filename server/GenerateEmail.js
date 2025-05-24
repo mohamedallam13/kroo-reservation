@@ -1,156 +1,164 @@
-/**
+(function (root, factory) {
+  root.EMAIL_SENDING = factory();
+})(this, function () {
+  
+  const LIVE = false
+  const testEmail = 'mohamedallam.tu@gmail.com'
+
+
+  /**
  * Generate HTML email content for booking confirmation
  * All CSS is inline for email client compatibility
  * 
  * @param {Object} bookingData - Booking data to include in the email
  * @returns {string} HTML email content
  */
-function generateBookingConfirmationEmail(bookingData) {
-  // Extract booking data
-  const {
-    resourceName,
-    date,
-    startTime,
-    endTime,
-    price,
-    paymentMethod,
-    reference,
-    partialPayment,
-    userDetails
-  } = bookingData;
-  
-  // Format date
-  const bookingDate = new Date(date);
-  const formattedDate = bookingDate.toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric'
-  });
-  
-  // Format time
-  const formattedStartTime = formatTime(startTime);
-  const formattedEndTime = formatTime(endTime);
-  const formattedTimeRange = `${formattedStartTime} - ${formattedEndTime}`;
-  
-  // Calculate duration
-  const startMinutes = convertTimeToMinutes(startTime);
-  const endMinutes = convertTimeToMinutes(endTime);
-  const durationHours = (endMinutes - startMinutes) / 60;
-  const formattedDuration = formatDuration(durationHours);
-  
-  // Generate unique QR code URL
-  // In a real implementation, this would generate an actual QR code image URL
-  const qrCodeUrl = `https://yourdomain.com/qr-codes/${reference}.png`;
-  
-  // Format payment method name
-  const formattedPaymentMethod = capitalizeFirstLetter(paymentMethod);
-  
-  // Generate email template and replace placeholders
-  let emailTemplate = BOOKING_CONFIRMATION_EMAIL_TEMPLATE;
-  
-  // Replace basic placeholders
-  emailTemplate = emailTemplate
-    .replace(/{{BOOKING_REFERENCE}}/g, reference)
-    .replace(/{{RESOURCE_NAME}}/g, resourceName)
-    .replace(/{{FORMATTED_DATE}}/g, formattedDate)
-    .replace(/{{FORMATTED_TIME}}/g, formattedTimeRange)
-    .replace(/{{DURATION}}/g, formattedDuration)
-    .replace(/{{PRICE}}/g, price.toFixed(2))
-    .replace(/{{PAYMENT_METHOD}}/g, formattedPaymentMethod)
-    .replace(/{{QR_CODE_URL}}/g, qrCodeUrl);
-  
-  // Handle partial payment section
-  if (partialPayment) {
-    // Replace partial payment placeholders
+  function generateBookingConfirmationEmail(bookingData) {
+    // Extract booking data
+    const {
+      resourceName,
+      date,
+      startTime,
+      endTime,
+      price,
+      paymentMethod,
+      reference,
+      partialPayment,
+      userDetails
+    } = bookingData;
+
+    // Format date
+    const bookingDate = new Date(date);
+    const formattedDate = bookingDate.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
+    });
+
+    // Format time
+    const formattedStartTime = formatTime(startTime);
+    const formattedEndTime = formatTime(endTime);
+    const formattedTimeRange = `${formattedStartTime} - ${formattedEndTime}`;
+
+    // Calculate duration
+    const startMinutes = convertTimeToMinutes(startTime);
+    const endMinutes = convertTimeToMinutes(endTime);
+    const durationHours = (endMinutes - startMinutes) / 60;
+    const formattedDuration = formatDuration(durationHours);
+
+    // Generate unique QR code URL
+    // In a real implementation, this would generate an actual QR code image URL
+    const qrCodeUrl = `https://yourdomain.com/qr-codes/${reference}.png`;
+
+    // Format payment method name
+    const formattedPaymentMethod = capitalizeFirstLetter(paymentMethod);
+
+    // Generate email template and replace placeholders
+    let emailTemplate = BOOKING_CONFIRMATION_EMAIL_TEMPLATE;
+
+    // Replace basic placeholders
     emailTemplate = emailTemplate
-      .replace(/{{PAID_AMOUNT}}/g, partialPayment.paid.toFixed(2))
-      .replace(/{{REMAINING_AMOUNT}}/g, partialPayment.remaining.toFixed(2));
-    
-    // Keep the partial payment section
-    emailTemplate = emailTemplate
-      .replace(/<!-- BEGIN:PARTIAL_PAYMENT -->/g, '')
-      .replace(/<!-- END:PARTIAL_PAYMENT -->/g, '');
-  } else {
-    // Remove the partial payment section entirely
-    emailTemplate = emailTemplate
-      .replace(/<!-- BEGIN:PARTIAL_PAYMENT -->[\s\S]*?<!-- END:PARTIAL_PAYMENT -->/g, '');
-  }
-  
-  // Add user-specific greeting if user details are available
-  if (userDetails && userDetails.name) {
-    // Add personalized greeting after the subtitle
-    const personalizedGreeting = `<p style="margin: 15px 0 0 0; font-size: 16px; color: #64748b;">Hello ${userDetails.name},</p>`;
-    emailTemplate = emailTemplate.replace(
-      `<p style="margin: 0; font-size: 16px; color: #64748b;">Your reservation has been successfully booked</p>`,
-      `<p style="margin: 0; font-size: 16px; color: #64748b;">Your reservation has been successfully booked</p>${personalizedGreeting}`
-    );
-  }
-  
-  return emailTemplate;
-}
+      .replace(/{{BOOKING_REFERENCE}}/g, reference)
+      .replace(/{{RESOURCE_NAME}}/g, resourceName)
+      .replace(/{{FORMATTED_DATE}}/g, formattedDate)
+      .replace(/{{FORMATTED_TIME}}/g, formattedTimeRange)
+      .replace(/{{DURATION}}/g, formattedDuration)
+      .replace(/{{PRICE}}/g, price.toFixed(2))
+      .replace(/{{PAYMENT_METHOD}}/g, formattedPaymentMethod)
+      .replace(/{{QR_CODE_URL}}/g, qrCodeUrl);
 
-/**
- * Convert HH:MM time to minutes since midnight
- * @param {string} timeString - Time in HH:MM format
- * @returns {number} Minutes since midnight
- */
-function convertTimeToMinutes(timeString) {
-  const [hours, minutes] = timeString.split(':').map(Number);
-  return hours * 60 + minutes;
-}
+    // Handle partial payment section
+    if (partialPayment) {
+      // Replace partial payment placeholders
+      emailTemplate = emailTemplate
+        .replace(/{{PAID_AMOUNT}}/g, partialPayment.paid.toFixed(2))
+        .replace(/{{REMAINING_AMOUNT}}/g, partialPayment.remaining.toFixed(2));
 
-/**
- * Format time from HH:MM to 12-hour format
- * @param {string} timeString - Time in HH:MM format
- * @returns {string} Formatted time
- */
-function formatTime(timeString) {
-  if (!timeString) return '';
-
-  const [hours, minutes] = timeString.split(':').map(Number);
-  const hour = parseInt(hours);
-
-  const suffix = hour >= 12 ? 'PM' : 'AM';
-  const displayHour = hour % 12 || 12;
-
-  return `${displayHour}${minutes !== 0 ? ':' + minutes.toString().padStart(2, '0') : ''} ${suffix}`;
-}
-
-/**
- * Format duration in hours to a readable string
- * @param {number} hours - Duration in hours
- * @returns {string} Formatted duration
- */
-function formatDuration(hours) {
-  if (hours === 1) {
-    return "1 hour";
-  } else if (hours < 1) {
-    const minutes = Math.round(hours * 60);
-    return `${minutes} min`;
-  } else {
-    const wholeHours = Math.floor(hours);
-    const minutes = Math.round((hours - wholeHours) * 60);
-
-    if (minutes === 0) {
-      return `${wholeHours} hour${wholeHours > 1 ? 's' : ''}`;
+      // Keep the partial payment section
+      emailTemplate = emailTemplate
+        .replace(/<!-- BEGIN:PARTIAL_PAYMENT -->/g, '')
+        .replace(/<!-- END:PARTIAL_PAYMENT -->/g, '');
     } else {
-      return `${wholeHours} hour${wholeHours > 1 ? 's' : ''} ${minutes} min`;
+      // Remove the partial payment section entirely
+      emailTemplate = emailTemplate
+        .replace(/<!-- BEGIN:PARTIAL_PAYMENT -->[\s\S]*?<!-- END:PARTIAL_PAYMENT -->/g, '');
+    }
+
+    // Add user-specific greeting if user details are available
+    if (userDetails && userDetails.name) {
+      // Add personalized greeting after the subtitle
+      const personalizedGreeting = `<p style="margin: 15px 0 0 0; font-size: 16px; color: #64748b;">Hello ${userDetails.name},</p>`;
+      emailTemplate = emailTemplate.replace(
+        `<p style="margin: 0; font-size: 16px; color: #64748b;">Your reservation has been successfully booked</p>`,
+        `<p style="margin: 0; font-size: 16px; color: #64748b;">Your reservation has been successfully booked</p>${personalizedGreeting}`
+      );
+    }
+
+    return emailTemplate;
+  }
+
+  /**
+   * Convert HH:MM time to minutes since midnight
+   * @param {string} timeString - Time in HH:MM format
+   * @returns {number} Minutes since midnight
+   */
+  function convertTimeToMinutes(timeString) {
+    const [hours, minutes] = timeString.split(':').map(Number);
+    return hours * 60 + minutes;
+  }
+
+  /**
+   * Format time from HH:MM to 12-hour format
+   * @param {string} timeString - Time in HH:MM format
+   * @returns {string} Formatted time
+   */
+  function formatTime(timeString) {
+    if (!timeString) return '';
+
+    const [hours, minutes] = timeString.split(':').map(Number);
+    const hour = parseInt(hours);
+
+    const suffix = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+
+    return `${displayHour}${minutes !== 0 ? ':' + minutes.toString().padStart(2, '0') : ''} ${suffix}`;
+  }
+
+  /**
+   * Format duration in hours to a readable string
+   * @param {number} hours - Duration in hours
+   * @returns {string} Formatted duration
+   */
+  function formatDuration(hours) {
+    if (hours === 1) {
+      return "1 hour";
+    } else if (hours < 1) {
+      const minutes = Math.round(hours * 60);
+      return `${minutes} min`;
+    } else {
+      const wholeHours = Math.floor(hours);
+      const minutes = Math.round((hours - wholeHours) * 60);
+
+      if (minutes === 0) {
+        return `${wholeHours} hour${wholeHours > 1 ? 's' : ''}`;
+      } else {
+        return `${wholeHours} hour${wholeHours > 1 ? 's' : ''} ${minutes} min`;
+      }
     }
   }
-}
 
-/**
- * Capitalize the first letter of a string
- * @param {string} string - String to capitalize
- * @returns {string} Capitalized string
- */
-function capitalizeFirstLetter(string) {
-  return string.charAt(0).toUpperCase() + string.slice(1);
-}
+  /**
+   * Capitalize the first letter of a string
+   * @param {string} string - String to capitalize
+   * @returns {string} Capitalized string
+   */
+  function capitalizeFirstLetter(string) {
+    return string.charAt(0).toUpperCase() + string.slice(1);
+  }
 
-// The email template HTML string
-const BOOKING_CONFIRMATION_EMAIL_TEMPLATE = `<!DOCTYPE html>
+  // The email template HTML string
+  const BOOKING_CONFIRMATION_EMAIL_TEMPLATE = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -374,11 +382,47 @@ const BOOKING_CONFIRMATION_EMAIL_TEMPLATE = `<!DOCTYPE html>
 </body>
 </html>`;
 
+function sendEmailForBooking(booking) {
+  const emailHtml = generateBookingConfirmationEmail(booking)
+  const subject = `KROO Booking Confirmation - ${booking.resourceName} on ${new Date(booking.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`
+  
+  try {
+    // Determine recipient based on live mode
+    const recipientEmail = LIVE ? booking.userDetails.email : testEmail
+    
+    MailApp.sendEmail({
+      to: recipientEmail,
+      subject: subject,
+      htmlBody: emailHtml,
+      noReply: true,
+      name: 'KROO Creative Collective'
+    });
+    
+    console.log(`Confirmation email sent successfully to ${recipientEmail}`);
+    
+    // If in test mode, log the original recipient
+    if (!LIVE) {
+      console.log(`Test mode: Original recipient would have been ${booking.userDetails.email}`);
+    }
+  } catch (error) {
+    console.error('Error sending confirmation email:', error);
+    throw new Error('Failed to send confirmation email');
+  }
+}
+
+
+  return {
+    generateBookingConfirmationEmail,
+    sendEmailForBooking
+  }
+
+})
+
 // Example code to generate an email for a specific booking
-function generateEmailForBooking(bookingId) {
+function generateEmailForBooking(booking) {
   // In a real implementation, you would fetch the booking data from your database
   // This is just an example
-  const booking = {
+  booking = booking || {
     resourceName: "Overlook Conference Room",
     date: "2025-05-20",
     startTime: "14:00",
@@ -398,20 +442,12 @@ function generateEmailForBooking(bookingId) {
       total: 200
     }
   };
-  
+
   // Generate the email HTML
   const emailHtml = generateBookingConfirmationEmail(booking);
-  
+
   // In a real implementation, you would send this HTML via your email service
   // For example: sendEmail(booking.userDetails.email, "Your Booking Confirmation", emailHtml);
-  
-  return emailHtml;
-}
 
-// Export the functions for use in other files
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = {
-    generateBookingConfirmationEmail,
-    generateEmailForBooking
-  };
+  return emailHtml;
 }

@@ -12,13 +12,32 @@
   let newMembersSheetObj
   let timestamp
 
-  function fetchData() {
+  function fetchResourcesAndSlots() {
     const masterFile = readFromJSON(MASTER_INDEX_ID)
-    const { krooResourcesRooms } = masterFile
+    const { krooResourcesRooms, bookingSlots } = masterFile
     const resourcesArray = readFromJSON(krooResourcesRooms)
+    const bookedSlots = readFromJSON(bookingSlots)
     convertImagesToDirectLinkExport(resourcesArray)
     console.log(resourcesArray)
-    return JSON.stringify({ krooResourcesRooms: resourcesArray })
+    return JSON.stringify({ krooResourcesRooms: resourcesArray, bookedSlots })
+  }
+
+  function fetchAllBookings() {
+    const masterFile = readFromJSON(MASTER_INDEX_ID)
+    const { roomBookings } = masterFile
+    const bookings = readFromJSON(roomBookings)
+    return JSON.stringify({ bookings })
+  }
+
+  function fetchUserBookings(request){
+    const { userEmail } = request
+    const masterFile = readFromJSON(MASTER_INDEX_ID)
+    const { roomBookings } = masterFile
+    const bookings = readFromJSON(roomBookings)
+    console.log(bookings)
+    console.log(userEmail)
+    const userBookings = bookings.filter(booking => booking.userDetails.email === userEmail)
+    return JSON.stringify({ userBookings })
   }
 
   function convertImagesToDirectLinkExport(resourcesArray) {
@@ -26,7 +45,7 @@
       resource.image = convertDriveUrlToDirectImageUrl(resource.imageLink)
       // Convert carousel images if they exist
       if (resource.picsCarousel && Array.isArray(resource.picsCarousel)) {
-        resource.carouselImages = resource.picsCarousel.map(imageLink => 
+        resource.carouselImages = resource.picsCarousel.map(imageLink =>
           convertDriveUrlToDirectImageUrl(imageLink)
         )
       }
@@ -73,13 +92,14 @@
   }
 
   function addBookingToDB(booking) {
+    const masterFile = readFromJSON(MASTER_INDEX_ID);
     timestamp = timestampCreate(undefined, "M/d/YYYY HH:mm:ss")
     getSheets()
     // Check if reservation already exisits in DB to avoid duplication
     const indexedReservations = reservationsSheetObj.indexObjectifiedValues("bookingReference").indexedValues
-    const {reference} = booking
+    const { reference } = booking
     console.log(indexedReservations)
-    if(indexedReservations[reference]){
+    if (indexedReservations[reference]) {
       console.log("Reservation already in DB!")
       return
     }
@@ -92,8 +112,10 @@
       const memberWriteArr = createWriteArr([memberObj], newMembersSheetObj)
       writeToSheet(memberWriteArr, newMembersSheetObj)
     }
-    removeFromBuffer(booking)
-    sendConfirmationEmail(booking)
+    addToBookingsFile(booking, masterFile)
+    addToBookingSlotsFile(booking, masterFile)
+    removeFromBuffer(booking, masterFile)
+    // sendConfirmationEmail(booking)
   }
 
   function getSheets() {
@@ -101,9 +123,23 @@
     newMembersSheetObj = getSheetObjFromParamObj({ ssid: RESRVE_SSID, sheetName: newMemberSheetName, parseObj })
   }
 
-  function removeFromBuffer(booking) {
+  function addToBookingsFile(booking, masterFile) {
+    const { roomBookings } = masterFile;
+    const bookings = readFromJSON(roomBookings);
+    bookings.push(booking);
+    writeToJSON(roomBookings, bookings);
+  }
+
+  function addToBookingSlotsFile(booking, masterFile) {
+    const { bookedSlot } = booking
+    const { bookingSlots } = masterFile;
+    const bookingSlotsArray = readFromJSON(bookingSlots);
+    bookingSlotsArray.push(bookedSlot);
+    writeToJSON(bookingSlots, bookingSlotsArray);
+  }
+
+  function removeFromBuffer(booking, masterFile) {
     const bookingReference = booking.reference
-    const masterFile = readFromJSON(MASTER_INDEX_ID);
     const { bookingBuffer } = masterFile;
     const pendingBookings = readFromJSON(bookingBuffer);
     const bookingIndex = pendingBookings.findIndex(booking => booking.reference === bookingReference);
@@ -128,7 +164,7 @@
   }
 
   function sendConfirmationEmail(booking) {
-    EmailModule.sendConfirmationEmail(booking)
+    EMAIL_SENDING.sendEmailForBooking(booking)
   }
 
   function addToCalendar() {
@@ -172,7 +208,9 @@
 
 
   return {
-    fetchData,
+    fetchResourcesAndSlots,
+    fetchAllBookings,
+    fetchUserBookings,
     addBookingToBuffer,
     addBookingToDB,
     cancelBooking
@@ -180,8 +218,15 @@
 
 })
 
-function fetchData() {
-  return KROO_BOOKING_APP.fetchData()
+function fetchResourcesAndSlots() {
+  return KROO_BOOKING_APP.fetchResourcesAndSlots()
+}
+
+function fetchAllBookings() {
+  return KROO_BOOKING_APP.fetchAllBookings()
+}
+function fetchUserBookings(request) {
+  return KROO_BOOKING_APP.fetchUserBookings(request)
 }
 
 const testBookingA = {

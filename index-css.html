@@ -1220,109 +1220,328 @@
     border-radius: 4px;
   }
   
-  /* Selection summary */
+  /* ===== CLEAN BOOKING SUMMARY - NO NESTING ===== */
   .selection-summary {
-    background-color: var(--color-bg-muted);
-    border-radius: var(--radius-md);
-    padding: var(--space-4);
-    margin-bottom: var(--space-6);
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin: 1rem 0;
   }
   
   .summary-header {
-    font-size: 0.875rem;
+    font-size: 1.125rem;
     font-weight: 600;
-    margin-bottom: var(--space-3);
+    color: #1e293b;
+    margin: 0 0 1.25rem 0;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 0.75rem;
   }
   
   .summary-details {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
+    flex-direction: column;
+    gap: 1rem;
   }
   
   .summary-info {
-    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
   }
   
-  .summary-change {
-    color: var(--color-primary);
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 0.875rem;
+  .summary-info .detail-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background-color: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+  }
+  
+  .summary-info .detail-item i {
+    color: #f59e0b;
+    width: 1.25rem;
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+  
+  .summary-info .detail-item span {
+    color: #374151;
     font-weight: 500;
   }
   
   .summary-grid {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
+    gap: 0.75rem;
+  }
+  
+  .summary-grid .detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background-color: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    min-height: 3rem;
+  }
+  
+  .summary-grid .detail-label {
+    color: #6b7280;
+    font-weight: 500;
+    font-size: 0.9375rem;
+  }
+  
+  .summary-grid .detail-value {
+    color: #1f2937;
+    font-weight: 600;
+    font-size: 0.9375rem;
   }
   
   .summary-total {
-    border-top: 1px solid var(--color-border);
-    margin-top: var(--space-2);
-    padding-top: var(--space-2);
+    background-color: #fffbeb !important;
+    border-color: #fcd34d !important;
+    border-width: 2px !important;
   }
   
-  /* Time selection dropdowns */
-  .custom-select-container {
-    position: relative;
-    width: 100%;
+  .summary-total .detail-label {
+    color: #92400e !important;
+    font-weight: 600 !important;
   }
   
-  .custom-select {
-    appearance: none;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    width: 100%;
-    padding: 12px 16px;
-    font-size: 1rem;
-    line-height: 1.5;
-    color: var(--color-text);
-    background-color: var(--color-bg-card);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
+  .summary-total .detail-value {
+    color: #d97706 !important;
+    font-size: 1.125rem !important;
+    font-weight: 700 !important;
+  }
+  
+  .summary-change {
+    background-color: transparent;
+    border: 1px solid #d1d5db;
+    color: #6b7280;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
     cursor: pointer;
-    transition: all 0.2s ease;
-    font-weight: 500;
+    transition: all 0.2s;
+    align-self: flex-start;
+    margin-top: 0.5rem;
   }
   
-  .custom-select:focus {
-    outline: none;
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px rgba(244, 180, 0, 0.15);
+  .summary-change:hover {
+    background-color: #f3f4f6;
+    border-color: #9ca3af;
+    color: #374151;
   }
   
-  .custom-select:hover:not(:disabled) {
-    border-color: var(--color-border-dark);
+  /* ===== CONSISTENT BOX WIDTHS FIX ===== */
+  .pricing-breakdown,
+  .savings-message,
+  .discount-applied,
+  .with-discount {
+    width: 100%;
+    max-width: 100%;
+    display: block;
+    clear: both;
+    margin: 0.75rem 0;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    background-color: white;
+    box-sizing: border-box;
   }
   
-  .custom-select.selected {
-    border-color: var(--color-primary);
-    background-color: #FFFBEB;
+  .pricing-breakdown {
+    border-left: 4px solid #6b7280;
   }
   
-  .custom-select option:disabled {
-    color: var(--color-text-light);
-    background-color: var(--color-bg-muted);
+  .savings-message {
+    background-color: #d1fae5 !important;
+    border-color: #059669 !important;
+    border-left: 4px solid #059669 !important;
+    color: #065f46;
   }
   
-  .time-range-selector {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    gap: 10px;
-    align-items: center;
-    margin-bottom: var(--space-6);
+  .discount-applied {
+    background-color: #f3e8ff !important;
+    border-color: #a855f7 !important;
+    border-left: 4px solid #a855f7 !important;
+    color: #6b21a8;
+    font-weight: 600;
   }
   
-  .time-range-separator {
+  .with-discount {
+    background-color: white;
+    border: 1px solid #e5e7eb;
+  }
+  
+  .pricing-breakdown,
+  .savings-message,
+  .discount-applied,
+  .with-discount {
+    flex: none !important;
+    float: none !important;
+    position: relative !important;
+  }
+  
+  .summary-total {
+    width: 100% !important;
+    display: block !important;
+  }
+  
+  .summary-total > * {
+    width: 100% !important;
+    display: block !important;
+    margin-bottom: 0.75rem !important;
+  }
+  
+  .summary-total > *:last-child {
+    margin-bottom: 0 !important;
+  }
+  
+  .breakdown-item {
+    color: #374151;
+    font-size: 0.9375rem;
+    margin-bottom: 0.5rem;
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    justify-content: center;
-    color: var(--color-text-muted);
-    font-size: 1.25rem;
-    padding-top: 32px;
+    width: 100%;
+  }
+  
+  .breakdown-item:last-child {
+    margin-bottom: 0;
+  }
+  
+  .breakdown-item .breakdown-label {
+    color: #6b7280;
+    font-weight: 500;
+    flex: 1;
+  }
+  
+  .breakdown-item .breakdown-value {
+    color: #1f2937;
+    font-weight: 600;
+    flex-shrink: 0;
+    text-align: right;
+  }
+  
+  .price-row,
+  .discount-row,
+  .net-price-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #f3f4f6;
+    font-size: 0.9375rem;
+    width: 100%;
+  }
+  
+  .price-row:last-child,
+  .discount-row:last-child,
+  .net-price-row {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+  
+  .discount-row {
+    color: #7c3aed;
+    font-weight: 600;
+  }
+  
+  .net-price-row {
+    font-weight: 700;
+    font-size: 1.0625rem;
+    color: #92400e;
+    border-top: 2px solid #fcd34d;
+    padding-top: 0.75rem;
+    margin-top: 0.5rem;
+  }
+  
+  .price-label,
+  .discount-label,
+  .net-price-label {
+    color: #6b7280;
+    font-weight: 500;
+    flex: 1;
+  }
+  
+  .price-value,
+  .discount-value,
+  .net-price-value {
+    color: #374151;
+    font-weight: 600;
+    flex-shrink: 0;
+    text-align: right;
+  }
+  
+  .net-price-value {
+    color: #d97706;
+    font-weight: 700;
+    font-size: 1.125rem;
+  }
+  
+  /* ===== MOBILE OPTIMIZATIONS ===== */
+  @media (max-width: 768px) {
+    .pricing-breakdown,
+    .savings-message,
+    .discount-applied,
+    .with-discount {
+      padding: 0.875rem;
+      margin: 0.5rem 0;
+      width: 100%;
+    }
+    
+    .breakdown-item,
+    .savings-message span,
+    .discount-applied {
+      font-size: 0.875rem;
+    }
+    
+    .price-row,
+    .discount-row,
+    .net-price-row {
+      padding: 0.625rem 0;
+      font-size: 0.875rem;
+    }
+    
+    .net-price-row {
+      font-size: 0.9375rem;
+    }
+    
+    .net-price-value {
+      font-size: 1rem;
+    }
+  }
+  
+  /* ===== EXTRA SMALL MOBILE ===== */
+  @media (max-width: 480px) {
+    .pricing-breakdown,
+    .savings-message,
+    .discount-applied,
+    .with-discount {
+      padding: 0.75rem;
+      margin: 0.5rem 0;
+    }
+    
+    .breakdown-item,
+    .price-row,
+    .discount-row,
+    .net-price-row {
+      font-size: 0.8125rem;
+    }
+    
+    .net-price-row {
+      font-size: 0.875rem;
+    }
+    
+    .net-price-value {
+      font-size: 0.9375rem;
+    }
   }
   
   /* ===== PAYMENT METHODS ===== */
@@ -2232,5 +2451,5 @@
       grid-template-columns: repeat(3, 1fr);
     }
   }
-  </style>
+</style>
   

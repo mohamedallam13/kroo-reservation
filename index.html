@@ -20,6 +20,7 @@
   <!-- Hidden inputs for user parameters -->
   <input type="hidden" id="user-email" value="<?= userEmail ?>">
   <input type="hidden" id="user-name" value="<?= userName ?>">
+  <input type="hidden" id="user-phone" value="<?= userPhone ?>">
   <input type="hidden" id="user-discount" value="<?= userDiscount ?>">
   <input type="hidden" id="is-admin" value="<?= isAdmin ?>">
 
@@ -47,18 +48,6 @@
     </div>
   </div>
 
-  <!-- Toast Notification (Template) -->
-  <div id="toast-template" class="toast template">
-    <div class="toast-icon">
-      <div class="toast-icon-success">
-        <i class="fas fa-check"></i>
-      </div>
-    </div>
-    <div class="toast-message">
-      <!-- Message will be inserted dynamically -->
-    </div>
-  </div>
-
   <!-- Header -->
   <header>
     <div class="container">
@@ -75,107 +64,29 @@
   <!-- Main Content -->
   <main>
     <div class="container">
-      <!-- Resources View -->
-      <div id="resources-view" class="resource-grid">
-        <!-- Resources will be dynamically inserted here -->
-      </div>
-
-      <!-- My Bookings View -->
-      <div id="bookings-view" class="bookings-view" style="display: none;">
-        <div class="bookings-header">
-          <h2 class="bookings-title">My Bookings</h2>
-          <div class="filter-buttons">
-            <button id="filter-upcoming" class="filter-btn active">Upcoming</button>
-            <button id="filter-past" class="filter-btn">Past</button>
-          </div>
+      <div class="main-content">
+        <!-- Resources View -->
+        <div id="resources-view" class="resource-grid">
+          <!-- Resources will be dynamically inserted here -->
         </div>
 
-        <div id="bookings-list" class="bookings-list">
-          <!-- Bookings will be dynamically inserted here -->
+        <!-- My Bookings View -->
+        <div id="bookings-view" class="bookings-view" style="display: none;">
+          <div class="bookings-header">
+            <h2 class="bookings-title">My Bookings</h2>
+            <div class="filter-buttons">
+              <button id="filter-upcoming" class="filter-btn active">Upcoming</button>
+              <button id="filter-past" class="filter-btn">Past</button>
+            </div>
+          </div>
+
+          <div id="bookings-list" class="bookings-list">
+            <!-- Bookings will be dynamically inserted here -->
+          </div>
         </div>
       </div>
     </div>
   </main>
-
-  <!-- Templates for dynamic content -->
-
-  <!-- Resource Card Template -->
-  <template id="resource-card-template">
-    <div class="resource-card">
-      <div class="card-image">
-        <img src="" alt="">
-        <div class="status-badge">
-          <!-- Status text will be inserted dynamically -->
-        </div>
-      </div>
-      <div class="card-content">
-        <h3 class="card-title"></h3>
-        <div class="card-details">
-          <div class="detail-item location">
-            <i class="fas fa-map-marker-alt"></i>
-            <span></span>
-          </div>
-          <div class="detail-item capacity">
-            <i class="fas fa-users"></i>
-            <span></span>
-          </div>
-        </div>
-        <div class="card-actions">
-          <button class="btn"></button>
-        </div>
-      </div>
-    </div>
-  </template>
-
-  <!-- Booking Card Template -->
-  <template id="booking-card-template">
-    <div class="booking-card">
-      <div class="booking-header">
-        <h3 class="booking-title"></h3>
-        <span class="booking-badge"></span>
-      </div>
-      <div class="booking-details">
-        <div class="detail-item date">
-          <i class="far fa-calendar-alt"></i>
-          <span></span>
-        </div>
-        <div class="detail-item time">
-          <i class="far fa-clock"></i>
-          <span></span>
-        </div>
-      </div>
-      <button class="btn btn-outline btn-danger">Cancel Booking</button>
-    </div>
-  </template>
-
-  <!-- Date Button Template -->
-  <template id="date-button-template">
-    <button class="date-button">
-      <span class="date-month"></span>
-      <span class="date-day"></span>
-      <span class="date-weekday"></span>
-    </button>
-  </template>
-
-  <!-- Time Slot Template -->
-  <template id="time-slot-template">
-    <div class="time-slot">
-      <span></span>
-    </div>
-  </template>
-
-  <!-- Payment Method Template -->
-  <template id="payment-method-template">
-    <div class="payment-method" data-method="">
-      <div class="payment-method-icon">
-        <img src="" alt="">
-      </div>
-      <div class="payment-method-details">
-        <h4></h4>
-        <p></p>
-      </div>
-    </div>
-  </template>
 
   <!-- Booking Modal -->
   <div id="booking-modal" class="modal">
@@ -209,25 +120,11 @@
         <!-- Time Slots -->
         <div>
           <h4 class="section-title">Select Time Range</h4>
-
           <div id="time-slots" class="time-slots">
             <!-- Time slots will be dynamically inserted here -->
           </div>
-
           <div id="time-visualization" class="time-visualization">
             <!-- Time visualization will be dynamically inserted here -->
-          </div>
-
-          <!-- Selected Slot Summary -->
-          <div id="selection-summary" class="selection-summary" style="display: none;">
-            <h4 class="summary-header">Your Selection</h4>
-            <div class="summary-details">
-              <div class="summary-info">
-                <div id="selected-date" class="detail-item"><i class="far fa-calendar-alt"></i> <span></span></div>
-                <div id="selected-time" class="detail-item"><i class="far fa-clock"></i> <span></span></div>
-              </div>
-              <button id="change-selection" class="summary-change">Change</button>
-            </div>
           </div>
         </div>
 
@@ -235,9 +132,15 @@
         <div id="selection-summary" class="selection-summary" style="display: none;">
           <h4 class="summary-header">Your Selection</h4>
           <div class="summary-details">
-            <div>
-              <div id="selected-date" class="detail-item"></div>
-              <div id="selected-time" class="detail-item"></div>
+            <div class="summary-info">
+              <div id="selected-date" class="detail-item">
+                <i class="far fa-calendar-alt"></i> 
+                <span></span>
+              </div>
+              <div id="selected-time" class="detail-item">
+                <i class="far fa-clock"></i> 
+                <span></span>
+              </div>
             </div>
             <button id="change-selection" class="summary-change">Change</button>
           </div>
@@ -273,7 +176,7 @@
             </div>
             <div class="detail-item summary-total">
               <span class="detail-label">Amount:</span>
-              <span class="detail-value">₱500.00</span>
+              <span class="detail-value">EGP 500.00</span>
             </div>
           </div>
         </div>
@@ -300,7 +203,7 @@
         <div class="payment-details">
           <div class="payment-details-grid">
             <div class="payment-label">Amount:</div>
-            <div class="payment-value">EGP500.00</div>
+            <div class="payment-value">EGP 500.00</div>
             <div class="payment-label">InstaPay Account:</div>
             <div class="payment-value">@kroo.cc</div>
             <div class="payment-label">Reference:</div>
@@ -328,6 +231,13 @@
         <!-- Verification Status -->
         <div id="verification-status" class="verification-status" style="display: none;">
           <!-- Will be dynamically populated -->
+        </div>
+
+        <!-- Confirmation Action (Hidden by default) -->
+        <div id="confirmation-action" style="display: none;">
+          <button id="confirm-booking" class="btn btn-success">
+            <i class="fas fa-check"></i> Confirm Booking
+          </button>
         </div>
 
         <!-- Action Buttons -->
@@ -367,18 +277,18 @@
           <h4 class="summary-header">Payment Summary</h4>
           <div class="summary-details payment-detail">
             <span class="detail-label">Reservation Fee:</span>
-            <span class="detail-value">₱500.00</span>
+            <span class="detail-value">EGP 500.00</span>
           </div>
         </div>
 
         <!-- Action Buttons -->
         <div class="button-group">
           <button id="back-to-methods-from-card" class="btn btn-outline">Back</button>
-          <button id="process-card-payment" class="btn btn-success">Pay ₱500.00</button>
+          <button id="process-card-payment" class="btn btn-success">Pay EGP 500.00</button>
         </div>
       </div>
 
-      <!-- Step 5: Other Payment Methods (placeholder) -->
+      <!-- Step 5: Other Payment Methods -->
       <div id="booking-step-5" class="modal-body" style="display: none;">
         <div class="payment-method-center">
           <div class="payment-method-logo">
@@ -398,7 +308,7 @@
   </div>
 
   <!-- Cancel Booking Modal -->
-  <div id="cancel-booking-modal" class="modal">
+  <div id="cancel-modal" class="modal">
     <div class="modal-content modal-sm">
       <div class="modal-header">
         <h3 class="modal-title">Cancel Booking</h3>
@@ -409,8 +319,8 @@
       <div class="modal-body">
         <p class="modal-message">Are you sure you want to cancel this booking?</p>
         <div class="button-group">
-          <button id="confirm-cancel" class="btn btn-danger">Yes, Cancel Booking</button>
-          <button id="keep-booking" class="btn btn-outline">No, Keep Booking</button>
+          <button id="cancel-yes" class="btn btn-danger">Yes, Cancel Booking</button>
+          <button id="cancel-no" class="btn btn-outline">No, Keep Booking</button>
         </div>
       </div>
     </div>

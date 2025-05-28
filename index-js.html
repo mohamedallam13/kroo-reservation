@@ -678,6 +678,260 @@
     }
   };
 
+  
+
+// ===== ENHANCED PRICING UTILITIES =====
+const PricingUtils = {
+  /**
+   * Calculate optimal pricing based on duration and room pricing structure
+   * @param {Object} resource - Resource object with pricing info
+   * @param {number} durationHours - Duration in hours
+   * @param {number} userDiscount - User discount percentage (0-100)
+   * @returns {Object} Pricing breakdown with recommendations
+   */
+  calculateOptimalPricing: function(resource, durationHours, userDiscount = 0) {
+    const hourlyTotal = durationHours * (resource.pricePerHour || 0);
+    let finalPrice = hourlyTotal;
+    let pricingType = 'hourly';
+    let savings = 0;
+
+    // Apply daily limit if it saves money
+    if (resource.dailyLimit > 0 && hourlyTotal > resource.dailyLimit) {
+      savings = hourlyTotal - resource.dailyLimit;
+      finalPrice = resource.dailyLimit;
+      pricingType = 'daily_limit';
+    }
+
+    // Apply discount
+    const discountAmount = (finalPrice * userDiscount) / 100;
+    const netPrice = finalPrice - discountAmount;
+
+    return {
+      basePrice: hourlyTotal,
+      originalPrice: hourlyTotal, // Add this for compatibility
+      finalPrice: finalPrice,
+      netPrice: netPrice,
+      discountAmount: discountAmount,
+      userDiscount: userDiscount,
+      savings: savings,
+      pricingType: pricingType,
+      durationHours: durationHours,
+      hasSavings: savings > 0,
+      hasDiscount: userDiscount > 0 && discountAmount > 0
+    };
+  },
+
+  /**
+   * Format pricing display with appropriate messaging
+   * @param {Object} pricingInfo - Result from calculateOptimalPricing
+   * @returns {Object} Formatted display information
+   */
+  formatPricingDisplay: function(pricingInfo) {
+    // Safety check
+    if (!pricingInfo) {
+      return {
+        priceLabel: 'Hourly Rate',
+        savingsMessage: null,
+        showDiscount: false,
+        pricingDetails: [],
+        formattedPrice: {
+          original: 0,
+          discount: 0,
+          final: 0
+        }
+      };
+    }
+
+    const {
+      finalPrice = 0,
+      basePrice = 0,
+      discountAmount = 0,
+      userDiscount = 0,
+      savings = 0,
+      pricingType = 'hourly',
+      durationHours = 1,
+      hasSavings = false,
+      hasDiscount = false
+    } = pricingInfo;
+
+    let priceLabel = '';
+    let savingsMessage = '';
+    let pricingDetails = [];
+
+    // Determine pricing label and details
+    if (pricingType === 'daily_limit') {
+      priceLabel = 'Daily Rate Cap Applied';
+      if (hasSavings) {
+        savingsMessage = `You save EGP ${savings.toFixed(2)} with our daily limit!`;
+      }
+      pricingDetails.push(`Base hourly rate: EGP ${basePrice.toFixed(2)}`);
+      pricingDetails.push(`Daily limit applied: EGP ${finalPrice.toFixed(2)}`);
+    } else {
+      priceLabel = 'Hourly Rate';
+      const hourlyRate = durationHours > 0 ? (basePrice / durationHours).toFixed(0) : '0';
+      pricingDetails.push(`${durationHours}h × EGP ${hourlyRate}/hour`);
+    }
+
+    return {
+      priceLabel,
+      savingsMessage,
+      pricingDetails,
+      showDiscount: hasDiscount,
+      formattedPrice: {
+        original: basePrice,
+        discount: discountAmount,
+        final: finalPrice
+      }
+    };
+  }
+};
+
+const enhancedPricingStyles = document.createElement('style');
+enhancedPricingStyles.id = 'enhanced-pricing-styles';
+enhancedPricingStyles.textContent = `
+  /* Enhanced pricing display in resource cards */
+  .pricing-info {
+    margin: 12px 0;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 6px;
+    border-left: 3px solid #f59e0b;
+  }
+  
+  .price-option {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  
+  .price-option:last-child {
+    margin-bottom: 0;
+  }
+  
+  .price-label {
+    color: #6b7280;
+    font-size: 0.875rem;
+  }
+  
+  .price-value {
+    font-weight: 600;
+    color: #1f2937;
+  }
+  
+  .price-note {
+    display: flex;
+    align-items: center;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #e5e7eb;
+    font-size: 0.75rem;
+    color: #059669;
+  }
+  
+  .price-note i {
+    margin-right: 4px;
+    font-size: 0.7rem;
+  }
+  
+  /* Enhanced pricing in selection summary */
+  .pricing-preview {
+    margin-top: 12px;
+    padding: 12px;
+    background-color: #fffbeb;
+    border-radius: 8px;
+    border: 1px solid #fcd34d;
+  }
+  
+  .pricing-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  
+  .pricing-label {
+    font-weight: 500;
+    color: #92400e;
+  }
+  
+  .pricing-amount {
+    font-weight: 700;
+    font-size: 1.125rem;
+    color: #d97706;
+  }
+  
+  .savings-message {
+    display: flex;
+    align-items: center;
+    color: #059669;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+  
+  .savings-message i {
+    margin-right: 6px;
+  }
+  
+  .discount-applied {
+    margin-top: 6px;
+    color: #7c3aed;
+    font-size: 0.875rem;
+  }
+  
+  /* Enhanced pricing in booking summary */
+  .pricing-breakdown {
+    margin-bottom: 8px;
+  }
+  
+  .breakdown-item {
+    color: #6b7280;
+    font-size: 0.875rem;
+    margin-bottom: 2px;
+  }
+  
+  .savings-highlight {
+    display: flex;
+    align-items: center;
+    margin: 8px 0;
+    padding: 6px 8px;
+    background-color: #d1fae5;
+    border-radius: 4px;
+    color: #059669;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+  
+  .savings-highlight i {
+    margin-right: 6px;
+  }
+  
+  /* Responsive design for pricing */
+  @media (max-width: 768px) {
+    .pricing-info {
+      margin: 8px 0;
+      padding: 8px;
+    }
+    
+    .price-option {
+      font-size: 0.875rem;
+    }
+    
+    .pricing-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+    }
+    
+    .pricing-amount {
+      font-size: 1rem;
+    }
+  }
+`;
+
+if (!document.getElementById('enhanced-pricing-styles')) {
+  document.head.appendChild(enhancedPricingStyles);
+}
 
   // ===== UI COMPONENTS =====
   const UI = {
@@ -736,94 +990,128 @@
     // Resource rendering
     renderResources: () => {
       const resourcesContainer = DOM.byId('resources-view');
-      if (!resourcesContainer) return;
+  if (!resourcesContainer) return;
 
-      // Show skeleton loaders while resources are loading
-      LoadingManager.showSkeletonLoader(resourcesContainer, 'rect', 3);
+  // Show skeleton loaders while resources are loading
+  LoadingManager.showSkeletonLoader(resourcesContainer, 'rect', 3);
 
-      // Use the API module to fetch resources
-      API.fetchResourcesAndSlots()
-        .then(fetchedResources => {
-          // Hide skeleton loaders
-          LoadingManager.hideSkeletonLoader(resourcesContainer);
+  // Use the API module to fetch resources
+  API.fetchResourcesAndSlots()
+    .then(fetchedResources => {
+      // Hide skeleton loaders
+      LoadingManager.hideSkeletonLoader(resourcesContainer);
 
-          // Clear container
-          resourcesContainer.innerHTML = '';
+      // Clear container
+      resourcesContainer.innerHTML = '';
 
-          // Render each resource
-          fetchedResources.forEach(resource => {
-            const card = document.createElement('div');
-            card.className = 'resource-card';
+      // Render each resource
+      fetchedResources.forEach(resource => {
+        const card = document.createElement('div');
+        card.className = 'resource-card';
 
-            const statusBadgeClass = resource.status === 'available'
-              ? 'status-badge available'
-              : 'status-badge maintenance';
+        const statusBadgeClass = resource.status === 'available'
+          ? 'status-badge available'
+          : 'status-badge maintenance';
 
-            card.innerHTML = `
-  <div class="card-image" data-resource-id="${resource.id}">
-    <img src="${resource.image}" alt="${resource.name}" loading="lazy">
-    <div class="image-overlay">
-      <i class="fas fa-expand"></i>
-    </div>
-    <div class="${statusBadgeClass}">
-      ${Utils.capitalizeFirstLetter(resource.status)}
-    </div>
-  </div>
-  <div class="card-content">
-    <h3 class="card-title">${resource.name}</h3>
-    <div class="card-details">
-      <div class="detail-item">
-        <i class="fas fa-map-marker-alt"></i>
-        <span>${resource.location}</span>
-      </div>
-      <div class="detail-item">
-        <i class="fas fa-users"></i>
-        <span>Capacity: ${resource.capacity} people</span>
-      </div>
-      <div class="detail-item">
-        <i class="fas fa-money-bill-wave"></i>
-        <span>EGP ${resource.pricePerHour}/hour</span>
-      </div>
-    </div>
-    <div class="card-actions">
-      <button 
-        class="btn ${resource.status === 'available' ? 'btn-primary' : 'btn-disabled'}"
-        ${resource.status !== 'available' ? 'disabled' : ''}
-        data-resource-id="${resource.id}"
-      >
-        Book Now
-      </button>
-    </div>
-  </div>
-`;
+        // Enhanced pricing display
+        let pricingDisplay = '';
+        if (resource.pricePerHour && resource.pricePerDay) {
+          pricingDisplay = `
+            <div class="pricing-info">
+              <div class="price-option">
+                <span class="price-label">Hourly:</span>
+                <span class="price-value">EGP ${resource.pricePerHour}/hr</span>
+              </div>
+              <div class="price-option">
+                <span class="price-label">Daily:</span>
+                <span class="price-value">EGP ${resource.pricePerDay}/day</span>
+              </div>
+              ${resource.dailyLimit && resource.dailyLimit < (resource.pricePerHour * 24) ? `
+                <div class="price-note">
+                  <i class="fas fa-info-circle"></i>
+                  <span>Daily cap: EGP ${resource.dailyLimit}</span>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        } else if (resource.pricePerHour) {
+          pricingDisplay = `
+            <div class="pricing-info">
+              <div class="price-option">
+                <span class="price-label">Rate:</span>
+                <span class="price-value">EGP ${resource.pricePerHour}/hour</span>
+              </div>
+            </div>
+          `;
+        }
 
-            resourcesContainer.appendChild(card);
+        card.innerHTML = `
+          <div class="card-image" data-resource-id="${resource.id}">
+            <img src="${resource.image || resource.imageLink}" alt="${resource.name}" loading="lazy">
+            <div class="image-overlay">
+              <i class="fas fa-expand"></i>
+            </div>
+            <div class="${statusBadgeClass}">
+              ${Utils.capitalizeFirstLetter(resource.status)}
+            </div>
+          </div>
+          <div class="card-content">
+            <h3 class="card-title">${resource.name}</h3>
+            <div class="card-details">
+              <div class="detail-item">
+                <i class="fas fa-map-marker-alt"></i>
+                <span>${resource.location}</span>
+              </div>
+              <div class="detail-item">
+                <i class="fas fa-users"></i>
+                <span>Capacity: ${resource.capacity} people</span>
+              </div>
+            </div>
+            ${pricingDisplay}
+            <div class="card-actions">
+              <button 
+                class="btn ${resource.status === 'available' ? 'btn-primary' : 'btn-disabled'}"
+                ${resource.status !== 'available' ? 'disabled' : ''}
+                data-resource-id="${resource.id}"
+              >
+                Book Now
+              </button>
+            </div>
+          </div>
+        `;
 
-            // Add event listener for image carousel
-            const cardImage = card.querySelector('.card-image');
-            if (cardImage && resource.carouselImages && resource.carouselImages.length > 0) {
-              cardImage.addEventListener('click', function (event) {
-                event.stopPropagation();
-                ImageCarousel.open(resource);
+        resourcesContainer.appendChild(card);
+
+        // Add event listener for image carousel
+        const cardImage = card.querySelector('.card-image');
+        if (cardImage && (resource.carouselImages || resource.picsCarousel)) {
+          const images = resource.carouselImages || resource.picsCarousel || [];
+          if (images.length > 0) {
+            cardImage.addEventListener('click', function (event) {
+              event.stopPropagation();
+              ImageCarousel.open({
+                ...resource,
+                carouselImages: images
               });
-            }
+            });
+          }
+        }
 
-            // Add event listener to the Book Now button (existing code)
-            const bookButton = card.querySelector('button[data-resource-id]');
-            if (resource.status === 'available' && bookButton) {
-              bookButton.addEventListener('click', () => {
-                BookingModal.open(resource.id);
-              });
-            }
-
+        // Add event listener to the Book Now button
+        const bookButton = card.querySelector('button[data-resource-id]');
+        if (resource.status === 'available' && bookButton) {
+          bookButton.addEventListener('click', () => {
+            BookingModal.open(resource.id);
           });
-        })
-        .catch(error => {
-          // Hide skeleton loaders
-          LoadingManager.hideSkeletonLoader(resourcesContainer);
+        }
+      });
+    })
+    .catch(error => {
+      // Hide skeleton loaders
+      LoadingManager.hideSkeletonLoader(resourcesContainer);
 
-          // Show error message in container
-          resourcesContainer.innerHTML = `
+      // Show error message in container
+      resourcesContainer.innerHTML = `
         <div class="error-container">
           <i class="fas fa-exclamation-circle error-icon"></i>
           <h3>Could not load resources</h3>
@@ -834,17 +1122,17 @@
         </div>
       `;
 
-          // Add event listener to retry button
-          const retryButton = resourcesContainer.querySelector('.retry-button');
-          if (retryButton) {
-            retryButton.addEventListener('click', UI.renderResources);
-          }
+      // Add event listener to retry button
+      const retryButton = resourcesContainer.querySelector('.retry-button');
+      if (retryButton) {
+        retryButton.addEventListener('click', UI.renderResources);
+      }
 
-          // Show error toast
-          Toast.show('error', 'Could not load resources. Please try again later.');
-          console.error('Error loading resources:', error);
-        });
-    },
+      // Show error toast
+      Toast.show('error', 'Could not load resources. Please try again later.');
+      console.error('Error loading resources:', error);
+    });
+},
 
     // Bookings rendering
     renderBookings: () => {
@@ -2460,30 +2748,91 @@
       }
     },
 
-    updateSelectionSummary: () => {
+    updateSelectionSummary: function() {
       if (!AppState.selectedTimeSlot) return;
 
-      // Show selection summary
-      const selectionSummary = DOM.byId('selection-summary');
-      if (selectionSummary) {
-        const selectedDate = DOM.byId('selected-date');
-        const selectedTime = DOM.byId('selected-time');
+const resource = resources.find(r => r.id === AppState.currentResourceId);
+if (!resource) return;
 
-        if (selectedDate && selectedTime) {
-          const dateObj = new Date(AppState.selectedTimeSlot.date);
-          const formattedDate = dateObj.toLocaleDateString('en-US', {
-            weekday: 'long',
-            month: 'long',
-            day: 'numeric'
-          });
+// Calculate optimal pricing
+const startMinutes = Utils.convertTimeToMinutes(AppState.selectedTimeSlot.startTime);
+const endMinutes = Utils.convertTimeToMinutes(AppState.selectedTimeSlot.endTime);
+const durationHours = (endMinutes - startMinutes) / 60;
 
-          selectedDate.querySelector('span').textContent = formattedDate;
-          selectedTime.querySelector('span').textContent = `${Utils.formatTime(AppState.selectedTimeSlot.startTime)} - ${Utils.formatTime(AppState.selectedTimeSlot.endTime)} (${AppState.selectedTimeSlot.durationFormatted})`;
+const pricingInfo = PricingUtils.calculateOptimalPricing(
+  resource, 
+  durationHours, 
+  AppState.userDiscount || 0
+);
 
-          DOM.show(selectionSummary);
-        }
-      }
-    },
+// Update AppState with calculated pricing
+AppState.selectedTimeSlot.price = pricingInfo.originalPrice;
+AppState.selectedTimeSlot.finalPrice = pricingInfo.finalPrice;
+AppState.selectedTimeSlot.pricingInfo = pricingInfo;
+
+// Show selection summary with NULL CHECKS
+const selectionSummary = DOM.byId('selection-summary');
+if (!selectionSummary) {
+  console.error('selection-summary element not found');
+  return;
+}
+
+// Get the span elements with proper error checking
+const selectedDateSpan = selectionSummary.querySelector('#selected-date span');
+const selectedTimeSpan = selectionSummary.querySelector('#selected-time span');
+
+if (!selectedDateSpan || !selectedTimeSpan) {
+  console.error('Date or time span elements not found');
+  return;
+}
+
+// Update date and time safely
+const dateObj = new Date(AppState.selectedTimeSlot.date);
+const formattedDate = dateObj.toLocaleDateString('en-US', {
+  weekday: 'long',
+  month: 'long',
+  day: 'numeric'
+});
+
+selectedDateSpan.textContent = formattedDate;
+selectedTimeSpan.textContent = `${Utils.formatTime(AppState.selectedTimeSlot.startTime)} - ${Utils.formatTime(AppState.selectedTimeSlot.endTime)} (${Utils.formatDuration(durationHours)})`;
+
+// Add pricing information to the summary
+const existingPricing = selectionSummary.querySelector('.pricing-preview');
+if (existingPricing) {
+  existingPricing.remove();
+}
+
+const displayInfo = PricingUtils.formatPricingDisplay(pricingInfo);
+
+const pricingDiv = document.createElement('div');
+pricingDiv.className = 'pricing-preview';
+pricingDiv.innerHTML = `
+  <div class="pricing-header">
+    <span class="pricing-label">${displayInfo.priceLabel}</span>
+    <span class="pricing-amount">EGP ${pricingInfo.finalPrice.toFixed(2)}</span>
+  </div>
+  ${displayInfo.savingsMessage ? `
+    <div class="savings-message">
+      <i class="fas fa-tag"></i>
+      <span>${displayInfo.savingsMessage}</span>
+    </div>
+  ` : ''}
+  ${displayInfo.showDiscount ? `
+    <div class="discount-applied">
+      <span>Your ${pricingInfo.userDiscount}% discount: -EGP ${pricingInfo.discountAmount.toFixed(2)}</span>
+    </div>
+  ` : ''}
+`;
+
+// Insert the pricing after the summary-info div
+const summaryInfo = selectionSummary.querySelector('.summary-info');
+if (summaryInfo) {
+  summaryInfo.after(pricingDiv);
+}
+
+DOM.show(selectionSummary);
+},
 
     goToPaymentSelection: () => {
       if (!AppState.selectedTimeSlot) {
@@ -2978,90 +3327,111 @@
     updateBookingSummary: () => {
       if (!AppState.selectedTimeSlot || !AppState.currentResourceId) return;
 
-      const resource = resources.find(r => r.id === AppState.currentResourceId);
-      if (!resource) return;
+const resource = resources.find(r => r.id === AppState.currentResourceId);
+if (!resource) return;
 
-      // Update resource, date, time
-      const summaryResource = DOM.byId('summary-resource');
-      const summaryDate = DOM.byId('summary-date');
-      const summaryTime = DOM.byId('summary-time');
+// Update resource, date, time
+const summaryResource = DOM.byId('summary-resource');
+const summaryDate = DOM.byId('summary-date');
+const summaryTime = DOM.byId('summary-time');
 
-      if (summaryResource && summaryDate && summaryTime) {
-        summaryResource.textContent = resource.name;
+if (summaryResource && summaryDate && summaryTime) {
+  summaryResource.textContent = resource.name;
 
-        const dateObj = new Date(AppState.selectedTimeSlot.date);
-        const formattedDate = dateObj.toLocaleDateString('en-US', {
-          weekday: 'short',
-          month: 'long',
-          day: 'numeric'
-        });
-        summaryDate.textContent = formattedDate;
+  const dateObj = new Date(AppState.selectedTimeSlot.date);
+  const formattedDate = dateObj.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'long',
+    day: 'numeric'
+  });
+  summaryDate.textContent = formattedDate;
 
-        summaryTime.textContent = `${Utils.formatTime(AppState.selectedTimeSlot.startTime)} - ${Utils.formatTime(AppState.selectedTimeSlot.endTime)} (${AppState.selectedTimeSlot.durationFormatted})`;
-      }
+  const durationFormatted = Utils.formatDuration(AppState.selectedTimeSlot.pricingInfo?.durationHours || 1);
+  summaryTime.textContent = `${Utils.formatTime(AppState.selectedTimeSlot.startTime)} - ${Utils.formatTime(AppState.selectedTimeSlot.endTime)} (${durationFormatted})`;
+}
 
-      // Calculate price with any applicable discount
-      const basePrice = AppState.selectedTimeSlot.price;
-      const userDiscount = AppState.userDiscount || 0;
-      const priceDetails = Utils.calculateBookingPrice(basePrice, userDiscount);
+// Get pricing info from selection
+const pricingInfo = AppState.selectedTimeSlot.pricingInfo;
+if (!pricingInfo) return;
 
-      // Store the calculated final price for later use
-      AppState.selectedTimeSlot.finalPrice = priceDetails.finalPrice;
+const displayInfo = PricingUtils.formatPricingDisplay(pricingInfo);
 
-      // Find the amount element(s)
-      const amountElements = document.querySelectorAll('.detail-item.summary-total');
+// Find the amount element(s)
+const amountElements = document.querySelectorAll('.detail-item.summary-total');
 
-      // Update each element found (usually just one)
-      amountElements.forEach(element => {
-        if (priceDetails.discountAmount > 0) {
-          // If there's a discount, show all three lines
-          element.innerHTML = `
-        <div class="with-discount">
-          <div class="price-row">
-            <span class="price-label">Amount:</span>
-            <span class="price-value">EGP ${priceDetails.originalPrice.toFixed(2)}</span>
+// Update each element found (usually just one)
+amountElements.forEach(element => {
+  let pricingHTML = '';
+
+  // Show pricing breakdown
+  if (displayInfo.pricingDetails.length > 0) {
+    pricingHTML += `
+      <div class="pricing-breakdown">
+        ${displayInfo.pricingDetails.map(detail => `
+          <div class="breakdown-item">
+            <span class="breakdown-label">${detail}</span>
           </div>
-          <div class="discount-row">
-            <span class="discount-label">Discount (${priceDetails.discountPercentage}%):</span>
-            <span class="discount-value">-EGP ${priceDetails.discountAmount.toFixed(2)}</span>
-          </div>
-          <div class="net-price-row">
-            <span class="net-price-label">Net Amount:</span>
-            <span class="net-price-value">EGP ${priceDetails.finalPrice.toFixed(2)}</span>
-          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  // Show savings message if applicable
+  if (displayInfo.savingsMessage) {
+    pricingHTML += `
+      <div class="savings-highlight">
+        <i class="fas fa-tag"></i>
+        <span>${displayInfo.savingsMessage}</span>
+      </div>
+    `;
+  }
+
+  // Show pricing
+  if (pricingInfo.discountAmount > 0) {
+    // If there's a discount, show all three lines
+    pricingHTML += `
+      <div class="with-discount">
+        <div class="price-row">
+          <span class="price-label">Amount:</span>
+          <span class="price-value">EGP ${pricingInfo.originalPrice.toFixed(2)}</span>
         </div>
-      `;
-        } else {
-          // No discount, just show the net amount line
-          element.innerHTML = `
-        <div>
-          <div class="net-price-row">
-            <span class="net-price-label">Amount:</span>
-            <span class="net-price-value">EGP ${priceDetails.finalPrice.toFixed(2)}</span>
-          </div>
+        <div class="discount-row">
+          <span class="discount-label">Discount (${pricingInfo.userDiscount}%):</span>
+          <span class="discount-value">-EGP ${pricingInfo.discountAmount.toFixed(2)}</span>
         </div>
-      `;
-        }
-      });
+        <div class="net-price-row">
+          <span class="net-price-label">Net Amount:</span>
+          <span class="net-price-value">EGP ${pricingInfo.finalPrice.toFixed(2)}</span>
+        </div>
+      </div>
+    `;
+  } else {
+    // No discount, just show the net amount line
+    pricingHTML += `
+      <div>
+        <div class="net-price-row">
+          <span class="net-price-label">Amount:</span>
+          <span class="net-price-value">EGP ${pricingInfo.finalPrice.toFixed(2)}</span>
+        </div>
+      </div>
+    `;
+  }
 
-      // Update payment button text if it exists
-      const payButton = DOM.byId('process-card-payment');
-      if (payButton) {
-        payButton.textContent = `Pay EGP ${priceDetails.finalPrice.toFixed(2)}`;
-      }
+  element.innerHTML = pricingHTML;
+});
 
-      // Update Instapay amount if it exists
-      const instapayAmount = document.querySelector('.payment-details-grid .payment-value:first-child');
-      if (instapayAmount) {
-        instapayAmount.textContent = `EGP ${priceDetails.finalPrice.toFixed(2)}`;
-      }
+// Update payment button text if it exists
+const payButton = DOM.byId('process-card-payment');
+if (payButton) {
+  payButton.textContent = `Pay EGP ${pricingInfo.finalPrice.toFixed(2)}`;
+}
 
-      // Update credit card payment amount if it exists
-      const cardPaymentSummary = document.querySelector('.payment-detail .detail-value');
-      if (cardPaymentSummary) {
-        cardPaymentSummary.textContent = `EGP ${priceDetails.finalPrice.toFixed(2)}`;
-      }
-    },
+// Update Instapay amount if it exists
+const instapayAmount = document.querySelector('.payment-details-grid .payment-value:first-child');
+if (instapayAmount) {
+  instapayAmount.textContent = `EGP ${pricingInfo.finalPrice.toFixed(2)}`;
+}
+},
 
     generatePaymentMethods: () => {
       const paymentMethodsContainer = DOM.byId('payment-methods');
@@ -5649,6 +6019,8 @@
                 status: resource.status || 'available',
                 location: resource.location || 'Not specified',
                 pricePerHour: resource.pricePerHour || 100,
+                dailyLimit: resource.dailyLimit || 0,
+                pricePerDay: resource.pricePerDay || 0,
                 carouselImages: resource.carouselImages || [],
                 resourceLabel: resource.resourceLabel || ''
               }));
